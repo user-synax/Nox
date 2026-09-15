@@ -10,6 +10,7 @@ import {
   Settings,
   Trophy,
   User,
+  Users,
 } from "lucide-react";
 import { auth } from "../lib/auth";
 import { Avatar } from "./Avatar";
@@ -112,6 +113,22 @@ export function Sidebar({ user, pathname }) {
 
         <div>
           <p className="px-3 pb-2 text-[11px] font-medium tracking-[0.08em] text-ink-muted">
+            COMMUNITY
+          </p>
+          <div className="flex flex-col gap-1">
+            <Link
+              href="/community"
+              aria-current={pathname.startsWith("/community") ? "page" : undefined}
+              className={itemCls(pathname.startsWith("/community"))}
+            >
+              <Users size={17} strokeWidth={2} aria-hidden="true" />
+              Community
+            </Link>
+          </div>
+        </div>
+
+        <div>
+          <p className="px-3 pb-2 text-[11px] font-medium tracking-[0.08em] text-ink-muted">
             YOU
           </p>
           <div className="flex flex-col gap-1">
@@ -188,6 +205,7 @@ export function TabBar({ user, pathname }) {
   const tabs = [
     { href: "/dashboard", label: "Home", Icon: LayoutDashboard, active: pathname === "/dashboard" },
     { href: "/challenges", label: "Challenges", Icon: Compass, active: pathname.startsWith("/challenges") },
+    { href: "/community", label: "Community", Icon: Users, active: pathname.startsWith("/community") },
     { href: "/leaderboard", label: "Ranks", Icon: Trophy, active: pathname.startsWith("/leaderboard") },
     { href: profileHref, label: "Profile", Icon: User, active: pathname === profileHref },
     { href: "/settings", label: "Settings", Icon: Settings, active: pathname === "/settings" },
@@ -198,7 +216,7 @@ export function TabBar({ user, pathname }) {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-hairline-soft bg-canvas/95 backdrop-blur lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div className="grid grid-cols-5 px-2 pt-1">
+      <div className="grid grid-cols-6 px-2 pt-1">
         {tabs.map(({ href, label, Icon, active }) => (
           <Link
             key={href + label}

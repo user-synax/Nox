@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import { createServer } from "node:http";
 import cors from "cors";
 import helmet from "helmet";
 import { toNodeHandler } from "better-auth/node";
@@ -13,6 +14,8 @@ import { createAdminRoutes } from "./routes/admin.js";
 import { createRunRoutes } from "./routes/runs.js";
 import { createSubmissionRoutes } from "./routes/submissions.js";
 import { createLeaderboardRoutes } from "./routes/leaderboard.js";
+import { createSolutionRoutes } from "./routes/solutions.js";
+import { initRealtime } from "./lib/realtime.js";
 
 // Connect first: auth + indexes depend on the database.
 // A missing/unreachable MongoDB fails fast here with a clear message.
@@ -90,6 +93,10 @@ app.use("/api", createSubmissionRoutes(auth, db));
 app.use(createLeaderboardRoutes(auth, db));
 app.use("/api", createLeaderboardRoutes(auth, db));
 
+// Community solutions + comments + likes (PRD §19, solved-only reads).
+app.use(createSolutionRoutes(auth, db));
+app.use("/api", createSolutionRoutes(auth, db));
+
 app.get("/api/health", async (_req, res) => {
   // Execution liveness rides along: counts only, nothing sensitive.
   // Lets the workspace distinguish "no worker online" from "queue busy".
@@ -121,7 +128,12 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
-const server = app.listen(env.PORT, () => {
+const httpServer = createServer(app);
+// Realtime fan-out lives on the same origin (PRD §25) — routes emit via
+// req.app.get("io"), sockets only ever receive.
+app.set("io", initRealtime(httpServer, auth));
+
+const server = httpServer.listen(env.PORT, () => {
   console.log(`[api] listening on http://localhost:${env.PORT}`);
   console.log(
     `[api] Google OAuth ${env.GOOGLE_CLIENT_ID ? "ENABLED" : "disabled (set GOOGLE_CLIENT_ID/SECRET to enable)"}`

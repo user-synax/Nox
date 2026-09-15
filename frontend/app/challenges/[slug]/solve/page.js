@@ -176,7 +176,7 @@ function ScoreRow({ label, value, max }) {  return (
  * + XP/rating deltas + rank-up) or rejection with failed hidden test
  * NAMES only (inputs stay server-side).
  */
-function VerdictCard({ result, preRating, onDismiss }) {
+function VerdictCard({ result, preRating, challengeSlug, onDismiss }) {
   const accepted = result?.status === "accepted";
   const failed = (result?.results ?? []).filter((r) => !r.passed);
   const b = result?.scoreBreakdown;
@@ -278,12 +278,21 @@ function VerdictCard({ result, preRating, onDismiss }) {
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Link
-          href="/challenges"
-          className={`Nox-focus inline-flex min-h-[44px] items-center justify-center rounded-pill bg-white px-5 text-[14px] font-medium text-black no-underline ${HOVER}`}
-        >
-          Back to catalog
-        </Link>
+        {result?.status === "accepted" && challengeSlug ? (
+          <Link
+            href={`/challenges/${challengeSlug}#solutions`}
+            className={`Nox-focus inline-flex min-h-[44px] items-center justify-center rounded-pill bg-white px-5 text-[14px] font-medium text-black no-underline ${HOVER}`}
+          >
+            Share your fix
+          </Link>
+        ) : (
+          <Link
+            href="/challenges"
+            className={`Nox-focus inline-flex min-h-[44px] items-center justify-center rounded-pill bg-white px-5 text-[14px] font-medium text-black no-underline ${HOVER}`}
+          >
+            Back to catalog
+          </Link>
+        )}
         <button
           type="button"
           onClick={onDismiss}
@@ -823,6 +832,7 @@ export default function SolvePage({ params }) {
             <VerdictCard
               result={submitResult}
               preRating={preRating}
+              challengeSlug={challenge.slug}
               onDismiss={() => {
                 setSubmitResult(null);
                 setSubmitPhase("idle");

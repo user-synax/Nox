@@ -90,6 +90,39 @@ export async function connectDB(uri) {
     .collection("ratingEvents")
     .createIndex({ createdAt: -1, category: 1 }, { name: "ratingEvents_created_cat" });
 
+  // Solutions + comments + likes (PRD §19, solved-only reads).
+  await db
+    .collection("solutions")
+    .createIndex({ challengeId: 1, createdAt: -1 }, { name: "solutions_challenge_created" });
+  await db
+    .collection("solutions")
+    .createIndex(
+      { challengeId: 1, likeCount: -1, createdAt: -1 },
+      { name: "solutions_challenge_top" }
+    );
+  await db
+    .collection("solutions")
+    .createIndex({ authorId: 1, createdAt: -1 }, { name: "solutions_author_created" });
+  // Community feed: newest-first across challenges.
+  await db
+    .collection("solutions")
+    .createIndex({ createdAt: -1 }, { name: "solutions_created" });
+  await db
+    .collection("comments")
+    .createIndex({ solutionId: 1, createdAt: 1 }, { name: "comments_solution_thread" });
+  await db
+    .collection("comments")
+    .createIndex({ authorId: 1, createdAt: -1 }, { name: "comments_author_created" });
+  // One like per (target × user); targetId stores the ObjectId as a string
+  // so solutions and comments share the collection safely.
+  await db.collection("likes").createIndex(
+    { targetType: 1, targetId: 1, userId: 1 },
+    { unique: true, name: "likes_target_user_unique" }
+  );
+  await db
+    .collection("likes")
+    .createIndex({ userId: 1, targetType: 1 }, { name: "likes_user_type" });
+
   // Worker heartbeats (liveness for the execution queue status).
   await db
     .collection("workerHeartbeats")

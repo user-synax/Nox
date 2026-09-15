@@ -6,13 +6,13 @@ import { ArrowLeft, ArrowRight, Check, FileCode2, FlaskConical, Lightbulb, Lock 
 import { auth, LANGUAGES, INTERESTS } from "../../../../lib/auth";
 import { recordRecent, swrGet } from "../../../../lib/workspace";
 import { DifficultyBadge, KIND_LABEL, formatSuccess } from "../../../../components/ChallengeBits";
+import { SolutionCard, SolutionComposer } from "../../../../components/Solutions";
+import { useLiveRooms } from "../../../../lib/socket";
 
 const HOVER =
   "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]";
 const PRESS =
   "transition-transform duration-[var(--duration-quick)] ease-[var(--ease-smooth-out)] active:scale-[0.97]";
-
-const TABS = ["Description", "Starter code", "Visible tests"];
 
 function langLabel(slug) {
   return LANGUAGES.find((l) => l.slug === slug)?.label ?? slug;
@@ -70,11 +70,143 @@ export default function ChallengeDetailPage({ params }) {
   const [challenge, setChallenge] = useState(null);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState(null);
-  const [tab, setTab] = useState(0);
+  // Deep-link from the solve verdict ("Share your fix" → #solutions).
+  // Lazy initializer (not an effect) so no cascading render.
+  const [tab, setTab] = useState(() =>
+    typeof window !== "undefined" && window.location.hash === "#solutions" ? 3 : 0
+  );
   const [file, setFile] = useState(0);
   const [mounted, setMounted] = useState(false);
+  // Community solutions (solved-only) — fetched lazily on tab open.
+  // Loading flags flip in click handlers; the effect only settles state
+  // inside fetch callbacks. `solFor` marks which challenge the list
+  // belongs to so a slug change shows a spinner instead of stale rows.
+  const [solItems, setSolItems] = useState([]);
+  const [solTotal, setSolTotal] = useState(0);
+  const [solPage, setSolPage] = useState(1);
+  const [solSort, setSolSort] = useState("newest");
+  const [solFor, setSolFor] = useState(null);
+  const [solLoading, setSolLoading] = useState(true);
+  const [solLoadingMore, setSolLoadingMore] = useState(false);
+  const [solLocked, setSolLocked] = useState(false);
+  const [solError, setSolError] = useState(null);
+  const [liking, setLiking] = useState({});
   const pillRef = useRef(null);
   const tabRefs = useRef([]);
+
+  useEffect(() => {
+    if (tab !== 3 || !challenge) return undefined;
+    let alive = true;
+    const slug = challenge.slug;
+    auth
+      .listSolutions(slug, { sort: solSort, page: solPage, limit: 20 })
+      .then((data) => {
+        if (!alive) return;
+        setSolItems((prev) => {
+          const fresh = data.items ?? [];
+          if (solPage === 1) return fresh;
+          const ids = new Set(prev.map((s) => s.id));
+          return [...prev, ...fresh.filter((s) => !ids.has(s.id))];
+        });
+        setSolTotal(data.total ?? 0);
+        setSolFor(slug);
+        setSolLocked(false);
+        setSolError(null);
+        setSolLoading(false);
+        setSolLoadingMore(false);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        if (err?.status === 403 && solPage === 1) {
+          setSolItems([]);
+          setSolTotal(0);
+          setSolFor(slug);
+          setSolLocked(true);
+        } else if (solPage === 1) {
+          setSolError(err?.message ?? "Could not load solutions.");
+        }
+        setSolLoading(false);
+        setSolLoadingMore(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tab, challenge, solSort, solPage]);
+
+  // Live list updates — counts merge authoritatively; likedByMe is never
+  // taken from echoes (payload `liked` describes the actor, not me).
+  useLiveRooms({
+    challengeId: tab === 3 ? (challenge?.id ?? null) : null,
+    events: {
+      "solution:new": ({ solution } = {}) => {
+        if (!solution?.id || solSort !== "newest" || solPage !== 1) {
+          setSolTotal((t) => t + 1);
+          return;
+        }
+        setSolItems((prev) =>
+          prev.some((s) => s.id === solution.id) ? prev : [solution, ...prev]
+        );
+        setSolTotal((t) => t + 1);
+      },
+      "solution:updated": ({ solution } = {}) => {
+        if (!solution?.id) return;
+        setSolItems((prev) =>
+          prev.map((s) => (s.id === solution.id ? { ...s, ...solution, likedByMe: s.likedByMe } : s))
+        );
+      },
+      "solution:deleted": ({ solutionId } = {}) => {
+        if (!solutionId) return;
+        setSolItems((prev) => prev.filter((s) => s.id !== solutionId));
+        setSolTotal((t) => Math.max(0, t - 1));
+      },
+      "solution:like": ({ solutionId, likeCount } = {}) => {
+        if (!solutionId || likeCount == null) return;
+        setSolItems((prev) =>
+          prev.map((s) => (s.id === solutionId ? { ...s, likeCount } : s))
+        );
+      },
+    },
+  });
+
+  const switchSolSort = (s) => {
+    if (s === solSort) return;
+    setSolSort(s);
+    setSolPage(1);
+    setSolLoading(true);
+  };
+
+  const toggleSolutionLike = async (solution) => {
+    if (!solution?.id || liking[solution.id]) return;
+    setLiking((m) => ({ ...m, [solution.id]: true }));
+    const prevLiked = !!solution.likedByMe;
+    const prevCount = solution.likeCount ?? 0;
+    // Optimistic: move the count instantly, reconcile on response.
+    setSolItems((rows) =>
+      rows.map((s) =>
+        s.id === solution.id
+          ? { ...s, likedByMe: !prevLiked, likeCount: prevCount + (prevLiked ? -1 : 1) }
+          : s
+      )
+    );
+    try {
+      const { liked, likeCount } = await auth.toggleSolutionLike(solution.id);
+      setSolItems((rows) =>
+        rows.map((s) => (s.id === solution.id ? { ...s, likedByMe: liked, likeCount } : s))
+      );
+    } catch {
+      setSolItems((rows) =>
+        rows.map((s) =>
+          s.id === solution.id ? { ...s, likedByMe: prevLiked, likeCount: prevCount } : s
+        )
+      );
+    } finally {
+      setLiking((m) => {
+        const next = { ...m };
+        delete next[solution.id];
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -166,6 +298,14 @@ export default function ChallengeDetailPage({ params }) {
     "Description",
     `Starter code${files.length > 1 ? ` (${files.length})` : ""}`,
     `Visible tests (${tests.length})`,
+    challenge.solved ? (
+      `Solutions${solTotal > 0 ? ` (${solTotal})` : ""}`
+    ) : (
+      <span className="inline-flex items-center gap-1.5">
+        <Lock size={13} aria-hidden="true" />
+        Solutions
+      </span>
+    ),
   ];
 
   return (
@@ -232,9 +372,9 @@ export default function ChallengeDetailPage({ params }) {
       {/* Tabs */}
       <div className="t-tabs mt-6" role="tablist" aria-label="Challenge sections">
         <span ref={pillRef} aria-hidden="true" className="t-tabs-pill" />
-        {tabLabels.map((label, i) => (
-          <button
-            key={label}
+          {tabLabels.map((label, i) => (
+            <button
+              key={i}
             ref={(el) => {
               tabRefs.current[i] = el;
             }}
@@ -298,7 +438,7 @@ export default function ChallengeDetailPage({ params }) {
                 Read-only preview — the editable workspace arrives with the editor.
               </p>
             </div>
-          ) : (
+          ) : tab === 2 ? (
             <div className="flex flex-col gap-2">
               {tests.map((t, i) => (
                 <div key={i} className="rounded-xl bg-surface-1 p-5">
@@ -334,6 +474,100 @@ export default function ChallengeDetailPage({ params }) {
                 Plus hidden edge-case tests that run when you submit — no hardcoding the
                 visible ones.
               </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2" aria-live="polite">
+              {solLocked && solFor === challenge.slug ? (
+                <div className="rounded-xl bg-surface-1 p-8 text-center">
+                  <p className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-ink-muted">
+                    <Lock size={18} aria-hidden="true" />
+                  </p>
+                  <p className="mt-3 text-[15px] font-medium text-ink">
+                    Solutions unlock after you solve
+                  </p>
+                  <p className="mx-auto mt-1 max-w-[42ch] text-[14px] leading-[1.5] text-ink-muted">
+                    Debuggers share their root-cause write-ups here — but only with
+                    people who&apos;ve cracked this challenge themselves.
+                  </p>
+                  <Link
+                    href={`/challenges/${challenge.slug}/solve`}
+                    className={`Nox-focus mt-5 inline-flex min-h-[44px] items-center justify-center rounded-pill bg-white px-6 text-[14px] font-medium text-black no-underline ${HOVER}`}
+                  >
+                    Solve it to unlock
+                  </Link>
+                </div>
+              ) : solFor !== challenge.slug || solLoading ? (
+                <div className="flex flex-col gap-2" aria-hidden="true" role="status" aria-label="Loading solutions">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="h-[120px] animate-pulse rounded-xl bg-surface-1" />
+                  ))}
+                </div>
+              ) : solError ? (
+                <p role="alert" className="rounded-xl bg-surface-1 p-6 text-center text-[14px] text-danger">
+                  {solError}
+                </p>
+              ) : (
+                <>
+                  {challenge.solved ? (
+                    <SolutionComposer
+                      challenge={challenge}
+                      defaultCode={challenge.solution?.files?.[0]?.content ?? ""}
+                      onPublished={(solution) => {
+                        if (!solution?.id) return;
+                        if (solSort === "newest" && solPage === 1) {
+                          setSolItems((prev) =>
+                            prev.some((s) => s.id === solution.id) ? prev : [solution, ...prev]
+                          );
+                        }
+                        setSolTotal((t) => t + 1);
+                      }}
+                    />
+                  ) : null}
+                  <div className="flex items-center gap-1 rounded-md bg-surface-1 p-1" role="tablist" aria-label="Solution order">
+                    {["newest", "top"].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        role="tab"
+                        aria-selected={solSort === s}
+                        onClick={() => switchSolSort(s)}
+                        className={`Nox-focus flex-1 cursor-pointer rounded border-0 px-2 py-1.5 text-[13px] font-medium capitalize ${HOVER} ${
+                          solSort === s ? "bg-surface-2 text-ink" : "bg-transparent text-ink-muted hover:text-ink"
+                        }`}
+                      >
+                        {s === "top" ? "Top liked" : "Newest"}
+                      </button>
+                    ))}
+                  </div>
+                  {solItems.length === 0 ? (
+                    <div className="rounded-xl bg-surface-1 p-8 text-center">
+                      <p className="text-[15px] font-medium text-ink">No write-ups yet</p>
+                      <p className="mx-auto mt-1 max-w-[42ch] text-[14px] text-ink-muted">
+                        {challenge.solved
+                          ? "Be the first to explain how you cracked it."
+                          : "No solver has shared their approach yet."}
+                      </p>
+                    </div>
+                  ) : (
+                    solItems.map((s) => (
+                      <SolutionCard key={s.id} solution={s} onLike={toggleSolutionLike} />
+                    ))
+                  )}
+                  {solItems.length < solTotal ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSolLoadingMore(true);
+                        setSolPage((p) => p + 1);
+                      }}
+                      disabled={solLoadingMore}
+                      className={`Nox-focus inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-pill border-0 bg-surface-1 px-5 text-[14px] font-medium text-ink disabled:cursor-wait disabled:opacity-70 ${HOVER}`}
+                    >
+                      {solLoadingMore ? "Loading…" : `Show more (${solItems.length} of ${solTotal})`}
+                    </button>
+                  ) : null}
+                </>
+              )}
             </div>
           )}
         </div>

@@ -208,6 +208,44 @@ export const challengeListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 
+/* ── Solutions + comments (PRD §19) ───────────────────────────── */
+
+/** POST /challenges/:id/solutions — one write-up; multiples per user allowed. */
+export const solutionWriteSchema = z.object({
+  title: z.string().trim().min(3, "Title needs at least 3 characters.").max(100),
+  body: z
+    .string()
+    .trim()
+    .min(10, "Explain the fix in at least 10 characters.")
+    .max(20_000, "Explanation is too long."),
+  code: z.string().min(1, "Solution code is required.").max(100_000, "Code is too large."),
+  language: z.enum(LANGUAGES),
+  tags: z.array(z.string().trim().min(1).max(30).toLowerCase()).max(10).default([]),
+});
+
+/** PATCH /solutions/:id — partial edit, at least one field. */
+export const solutionPatchSchema = solutionWriteSchema
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to update." });
+
+/** POST /solutions/:id/comments — single thread per solution, no nesting. */
+export const commentWriteSchema = z.object({
+  body: z.string().trim().min(1, "Comment can't be empty.").max(2000, "Comment is too long."),
+});
+
+/** GET /challenges/:id/solutions query. */
+export const solutionListQuerySchema = z.object({
+  sort: z.enum(["newest", "top"]).default("newest"),
+  page: z.coerce.number().int().min(1).max(1000).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+/** GET /solutions/:id/comments query — oldest-first thread order. */
+export const commentListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).max(1000).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
 /* ── Execution (run visible tests) ──────────────────────────────── */
 
 /** Languages the workers can actually execute (rest → 422 for now). */

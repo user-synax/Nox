@@ -7,6 +7,7 @@ import { ArrowUpRight, CalendarDays, Check, GitBranch, Globe } from "lucide-reac
 import { auth, rankFor } from "../../../lib/auth";
 import { Avatar } from "../../../components/Avatar";
 import { RankBadge } from "../../../components/Leaderboard";
+import { SolutionCard } from "../../../components/Solutions";
 import { StatNumber } from "../../../components/Stat";
 
 const HOVER =
@@ -55,6 +56,8 @@ export default function PublicProfilePage({ params }) {
   const [missing, setMissing] = useState(false);
   const [isOwn, setIsOwn] = useState(false);
   const [tab, setTab] = useState(0);
+  const [solItems, setSolItems] = useState([]);
+  const [solTotal, setSolTotal] = useState(0);
   const [mounted, setMounted] = useState(false);
   const pillRef = useRef(null);
   const tabRefs = useRef([]);
@@ -64,7 +67,8 @@ export default function PublicProfilePage({ params }) {
     Promise.allSettled([
       auth.publicProfile(username),
       auth.meFull().catch(() => null),
-    ]).then(([pub, me]) => {
+      auth.authorSolutions(username, 1, 20).catch(() => null),
+    ]).then(([pub, me, sols]) => {
       if (!alive) return;
       if (pub.status === "fulfilled") {
         setData(pub.value);
@@ -72,6 +76,10 @@ export default function PublicProfilePage({ params }) {
         if (meUser?.username === pub.value.user.username) setIsOwn(true);
       } else {
         setMissing(true);
+      }
+      if (sols.status === "fulfilled" && sols.value) {
+        setSolItems(sols.value.items ?? []);
+        setSolTotal(sols.value.total ?? 0);
       }
     });
     return () => {
@@ -98,8 +106,33 @@ export default function PublicProfilePage({ params }) {
     pill.style.transition = prev;
   }, [tab, mounted]);
 
-  const movePill = (index, animate) => {
-    const pill = pillRef.current;
+  // Optimistic like for profile cards — reconcile, revert on failure.
+  const toggleProfileLike = async (solution) => {
+    if (!solution?.id) return;
+    const prevLiked = !!solution.likedByMe;
+    const prevCount = solution.likeCount ?? 0;
+    setSolItems((rows) =>
+      rows.map((s) =>
+        s.id === solution.id
+          ? { ...s, likedByMe: !prevLiked, likeCount: prevCount + (prevLiked ? -1 : 1) }
+          : s
+      )
+    );
+    try {
+      const { liked, likeCount } = await auth.toggleSolutionLike(solution.id);
+      setSolItems((rows) =>
+        rows.map((s) => (s.id === solution.id ? { ...s, likedByMe: liked, likeCount } : s))
+      );
+    } catch {
+      setSolItems((rows) =>
+        rows.map((s) =>
+          s.id === solution.id ? { ...s, likedByMe: prevLiked, likeCount: prevCount } : s
+        )
+      );
+    }
+  };
+
+  const movePill = (index, animate) => {    const pill = pillRef.current;
     const el = tabRefs.current[index];
     if (!pill || !el) return;
     if (!animate) {
@@ -319,6 +352,7 @@ export default function PublicProfilePage({ params }) {
                     ) : null}
                   </div>
                 ) : tab === 1 ? (
+                  solItems.length === 0 ? (
                   <section className="rounded-xl bg-surface-1 p-8 text-center">
                     <p className="text-[15px] font-medium text-ink">No shared solutions yet</p>
                     <p className="mx-auto mt-2 max-w-[42ch] text-[14px] leading-[1.45] text-ink-muted">
@@ -327,6 +361,18 @@ export default function PublicProfilePage({ params }) {
                         : "Once they solve challenges and publish write-ups, they'll live here."}
                     </p>
                   </section>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {solItems.map((s) => (
+                        <SolutionCard key={s.id} solution={s} onLike={toggleProfileLike} />
+                      ))}
+                      {solTotal > solItems.length ? (
+                        <p className="Nox-mono py-2 text-center text-[12px] text-ink-muted">
+                          Showing {solItems.length} of {solTotal}
+                        </p>
+                      ) : null}
+                    </div>
+                  )
                 ) : (
                   <section className="rounded-xl bg-surface-1 p-5" aria-label="Recent activity">
                     {(data.recentSolves?.length ?? 0) === 0 ? (

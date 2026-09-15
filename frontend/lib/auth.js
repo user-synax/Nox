@@ -190,6 +190,68 @@ export const auth = {
   },
   /** Rank ladder + XP tuning (source of truth lives in backend scoring). */
   ranksConfig: () => request("/leaderboard/ranks"),
+  // ── Community solutions (solved-only reads) ──
+  /** List a challenge's solutions — sort: newest | top. */
+  listSolutions: (ref, params = {}) => {
+    const qs = new URLSearchParams();
+    for (const k of ["sort", "page", "limit"]) {
+      const v = params[k];
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    }
+    const suffix = qs.toString();
+    return request(`/challenges/${encodeURIComponent(ref)}/solutions${suffix ? `?${suffix}` : ""}`);
+  },
+  /** Share a write-up — { title, body, code, language, tags[] }. */
+  shareSolution: (ref, data) =>
+    request(`/challenges/${encodeURIComponent(ref)}/solutions`, {
+      method: "POST",
+      body: data,
+    }),
+  /** Full post + code. 403 when the viewer hasn't solved the challenge. */
+  getSolution: (id) => request(`/solutions/${encodeURIComponent(id)}`),
+  /** Author/admin edit — partial { title, body, code, language, tags }. */
+  editSolution: (id, data) =>
+    request(`/solutions/${encodeURIComponent(id)}`, { method: "PATCH", body: data }),
+  /** Author/admin delete (removes thread + likes). */
+  deleteSolution: (id) =>
+    request(`/solutions/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  /** Toggle like → { liked, likeCount }. */
+  toggleSolutionLike: (id) =>
+    request(`/solutions/${encodeURIComponent(id)}/like`, { method: "POST" }),
+  /** Thread — oldest first. */
+  listComments: (id, params = {}) => {
+    const qs = new URLSearchParams();
+    for (const k of ["page", "limit"]) {
+      const v = params[k];
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    }
+    const suffix = qs.toString();
+    return request(`/solutions/${encodeURIComponent(id)}/comments${suffix ? `?${suffix}` : ""}`);
+  },
+  /** Reply → { comment, commentCount }. */
+  postComment: (id, body) =>
+    request(`/solutions/${encodeURIComponent(id)}/comments`, {
+      method: "POST",
+      body: { body },
+    }),
+  /** Author/admin comment edit. */
+  editComment: (id, body) =>
+    request(`/comments/${encodeURIComponent(id)}`, { method: "PATCH", body: { body } }),
+  /** Author/admin comment delete → { deleted, commentCount }. */
+  deleteComment: (id) =>
+    request(`/comments/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  /** Toggle comment like → { liked, likeCount }. */
+  toggleCommentLike: (id) =>
+    request(`/comments/${encodeURIComponent(id)}/like`, { method: "POST" }),
+  /** Own posts, newest first. */
+  mySolutions: (page = 1, limit = 20) =>
+    request(`/users/me/solutions?page=${page}&limit=${limit}`),
+  /** Community feed — newest write-ups from challenges you solved. */
+  recentSolutions: (page = 1, limit = 20) =>
+    request(`/solutions/recent?page=${page}&limit=${limit}`),
+  /** Author posts visible to the viewer (solved-only filtering server-side). */
+  authorSolutions: (username, page = 1, limit = 20) =>
+    request(`/users/${encodeURIComponent(username)}/solutions?page=${page}&limit=${limit}`),
   /** Challenge catalog — filters: q, difficulty, language, category, tag, sort, page, limit. */
   listChallenges: (params = {}) => {
     const qs = new URLSearchParams();
