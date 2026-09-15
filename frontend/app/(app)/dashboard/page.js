@@ -5,6 +5,12 @@ import Link from "next/link";
 import { Check, ChevronRight, Flame, History, Lock } from "lucide-react";
 import { useAppSession } from "../../../components/SessionScope";
 import { StatNumber } from "../../../components/Stat";
+import {
+  LeaderboardMini,
+  LevelProgress,
+  RankBadge,
+} from "../../../components/Leaderboard";
+import { rankFor, rankProgress } from "../../../lib/auth";
 import { getRecent } from "../../../lib/workspace";
 
 const HOVER =
@@ -19,7 +25,7 @@ function greeting() {
   return "Good evening";
 }
 
-function StatCard({ label, value, sub }) {
+function StatCard({ label, value, sub, foot }) {
   return (
     <div className="rounded-xl bg-surface-1 px-4 py-4">
       <StatNumber
@@ -28,6 +34,7 @@ function StatCard({ label, value, sub }) {
       />
       <p className="mt-2 text-[13px] font-medium tracking-[-0.13px] text-ink">{label}</p>
       {sub ? <p className="mt-0.5 text-[12px] text-ink-muted">{sub}</p> : null}
+      {foot ? <div className="mt-2">{foot}</div> : null}
     </div>
   );
 }
@@ -72,6 +79,11 @@ export default function DashboardPage() {
     { done: (stats?.solvedCount ?? 0) > 0, label: "Solve your first challenge", href: "/challenges" },
   ];
   const doneCount = checklist.filter((c) => c.done).length;
+  // Onboarding done → the setup checklist has served its purpose.
+  const showGettingStarted = !user?.onboardingCompleted;
+  const rating = stats?.rating ?? 1000;
+  const xp = stats?.xp ?? 0;
+  const prog = rankProgress(rating);
 
   return (
     <div data-open={mounted} className="t-panel-slide Nox-auth-enter">
@@ -104,19 +116,27 @@ export default function DashboardPage() {
           />
           {streak > 0 ? `${streak}-day streak` : "Start your streak"}
         </span>
-      </div>
+      </div>  
 
       {/* Stats */}
       <div className="mt-8 grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <StatCard label="Rating" value={stats?.rating ?? 1000} />
-        <StatCard label="XP" value={stats?.xp ?? 0} sub={`Level ${stats?.level ?? 1}`} />
+        <StatCard label="Rating" value={rating} sub={`Rank ${rankFor(rating)}`} />
+        <StatCard
+          label="XP"
+          value={xp}
+          sub={`Level ${stats?.level ?? 1}`}
+          foot={<LevelProgress xp={xp} />}
+        />
         <StatCard label="Solved" value={stats?.solvedCount ?? 0} />
         <StatCard label="Day streak" value={streak} />
       </div>
 
+      {/* Main column + leaderboard rail */}
+      <div className="mt-2 grid items-start gap-2 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="flex min-w-0 flex-col gap-2">
       {/* Recently viewed — local IDB lookup, renders instantly */}
       {recent.length > 0 ? (
-        <section aria-label="Recently viewed" className="mt-2 rounded-xl bg-surface-1 p-5">
+        <section aria-label="Recently viewed" className="rounded-xl bg-surface-1 p-5">
           <h2 className="flex items-center gap-2 text-[15px] font-medium tracking-[-0.15px] text-ink">
             <History size={15} aria-hidden="true" className="text-ink-muted" />
             Pick up where you left off
@@ -141,7 +161,8 @@ export default function DashboardPage() {
       ) : null}
 
       {/* Checklist + daily spotlight */}
-      <div className="mt-2 grid gap-2 pt-2 lg:grid-cols-5">
+      <div className={`grid gap-2 ${showGettingStarted ? "lg:grid-cols-5" : ""}`}>
+        {showGettingStarted ? (
         <section
           aria-label="Getting started"
           className="rounded-xl bg-surface-1 p-5 lg:col-span-3"
@@ -225,11 +246,12 @@ export default function DashboardPage() {
             ))}
           </ul>
         </section>
+        ) : null}
 
         {/* The one atmospheric card on this page (DESIGN.md: scarce by design). */}
         <section
           aria-label="Daily challenge"
-          className="flex flex-col justify-between overflow-hidden rounded-xl bg-gradient-violet p-5 text-white lg:col-span-2"
+          className={`flex flex-col justify-between overflow-hidden rounded-xl bg-gradient-violet p-5 text-white ${showGettingStarted ? "lg:col-span-2" : ""}`}
         >
           <div>
             <p className="text-[11px] font-medium tracking-[0.08em] opacity-80">
@@ -253,7 +275,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Activity */}
-      <section aria-label="Recent activity" className="mt-2 rounded-xl bg-surface-1 p-5">
+      <section aria-label="Recent activity" className="rounded-xl bg-surface-1 p-5">
         <h2 className="text-[15px] font-medium tracking-[-0.15px] text-ink">
           Recent activity
         </h2>
@@ -261,6 +283,44 @@ export default function DashboardPage() {
           No solves yet — your debugging history will live here once challenges go live.
         </p>
       </section>
+        </div>
+
+        {/* Right rail — rank progress + mini leaderboard */}
+        <aside className="flex min-w-0 flex-col gap-2 xl:sticky xl:top-6">
+          <section aria-label="Your rank" className="rounded-xl bg-surface-1 p-5">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-[15px] font-medium tracking-[-0.15px] text-ink">
+                Your rank
+              </h2>
+              <RankBadge rank={prog.current} />
+            </div>
+            <p className="Nox-mono mt-3 text-[13px] text-ink-muted" role="status">
+              {prog.next ? (
+                <>
+                  <span className="font-medium text-ink">{prog.remaining}</span> rating
+                  to {prog.next} ({prog.nextMin}+)
+                </>
+              ) : (
+                <>Top rank — Grandmaster. Defend it.</>
+              )}
+            </p>
+            <span
+              className="mt-2 block h-1 overflow-hidden rounded-full bg-surface-2"
+              role="progressbar"
+              aria-valuenow={prog.pct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`Progress to ${prog.next ?? "max rank"}`}
+            >
+              <span
+                className="block h-full rounded-full bg-success"
+                style={{ width: `${prog.pct}%` }}
+              />
+            </span>
+          </section>
+          <LeaderboardMini username={user?.username ?? null} />
+        </aside>
+      </div>
     </div>
   );
 }

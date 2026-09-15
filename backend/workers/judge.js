@@ -63,14 +63,18 @@ export async function judgeSubmit(db, job, exec) {
   let score = { correctness: 0, efficiency: 0, speed: 0, quality: 0, changedLines: 0, total: 0 };
   let xpAwarded = 0;
   let ratingDelta = 0;
+  let solveLanguage = job.language ?? null;
+  let solveCategory = job.category ?? null;
   if (status === "accepted") {
     const challenge = await db
       .collection("challenges")
       .findOne(
         { _id: job.challengeId },
-        { projection: { difficulty: 1, starterFiles: 1 } }
+        { projection: { difficulty: 1, starterFiles: 1, language: 1, category: 1 } }
       );
     const difficulty = challenge?.difficulty ?? "medium";
+    solveLanguage = job.language ?? challenge?.language ?? null;
+    solveCategory = job.category ?? challenge?.category ?? null;
     score = scoreSubmission({
       difficulty,
       executionTimeMs: exec.executionTimeMs,
@@ -129,11 +133,20 @@ export async function judgeSubmit(db, job, exec) {
   // Strip every $set path: Mongo rejects same-path $set + $setOnInsert.
   const insertDefaults = defaultProfileStats(userId);
   for (const k of Object.keys(set)) delete insertDefaults[k];
-  await statsCol.updateOne(
-    { userId },
-    { $set: set, $setOnInsert: insertDefaults },
-    { upsert: true }
-  );
+  const inc = {};
+  if (status === "accepted" && xpAwarded > 0) {
+    // Per-track XP powers language/category leaderboards (§16).
+    // $inc creates the nested maps on old docs that predate them.
+    if (solveLanguage) inc[`xpByLanguage.${solveLanguage}`] = xpAwarded;
+    if (solveCategory) inc[`xpByCategory.${solveCategory}`] = xpAwarded;
+    if (!priorAccepted) {
+      if (solveLanguage) inc[`solvesByLanguage.${solveLanguage}`] = 1;
+      if (solveCategory) inc[`solvesByCategory.${solveCategory}`] = 1;
+    }
+  }
+  const updateOp = { $set: set, $setOnInsert: insertDefaults };
+  if (Object.keys(inc).length > 0) updateOp.$inc = inc;
+  await statsCol.updateOne({ userId }, updateOp, { upsert: true });
 
   // Rating event feeds weekly leaderboard + recent solves.
   if (status === "accepted" || status === "rejected") {
@@ -144,6 +157,8 @@ export async function judgeSubmit(db, job, exec) {
         challengeSlug: job.challengeSlug,
         challengeTitle: job.challengeTitle,
         difficulty: job.difficulty,
+        language: solveLanguage,
+        category: solveCategory,
         accepted: status === "accepted",
         score: score.total,
         ratingDelta,

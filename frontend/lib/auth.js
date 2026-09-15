@@ -164,6 +164,32 @@ export const auth = {
   /** Own submission history, newest first. */
   mySubmissions: (page = 1, limit = 20) =>
     request(`/users/me/submissions?page=${page}&limit=${limit}`),
+  /** Leaderboard — type: global | level | weekly | language | category.
+   *  params: { limit, page, language, category }. Language boards need
+   *  `language`, category boards need `category`, weekly accepts both
+   *  as optional filters. */
+  listLeaderboard: (type = "global", params = {}) => {
+    const allowed = ["global", "level", "weekly", "language", "category"];
+    const board = allowed.includes(type) ? type : "global";
+    const qs = new URLSearchParams();
+    for (const k of ["limit", "page", "language", "category"]) {
+      const v = params[k];
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    }
+    const suffix = qs.toString();
+    return request(`/leaderboard/${board}${suffix ? `?${suffix}` : ""}`);
+  },
+  /** Own position on a board — 401 when signed out (callers treat as “—”). */
+  myBoardPosition: (type = "global", params = {}) => {
+    const qs = new URLSearchParams({ type });
+    for (const k of ["language", "category"]) {
+      const v = params[k];
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    }
+    return request(`/leaderboard/me?${qs.toString()}`);
+  },
+  /** Rank ladder + XP tuning (source of truth lives in backend scoring). */
+  ranksConfig: () => request("/leaderboard/ranks"),
   /** Challenge catalog — filters: q, difficulty, language, category, tag, sort, page, limit. */
   listChallenges: (params = {}) => {
     const qs = new URLSearchParams();
@@ -190,6 +216,29 @@ const RANK_STEPS = [
 
 export function rankFor(rating) {
   return RANK_STEPS.find(([min]) => (rating ?? 1000) >= min)?.[1] ?? "Bronze";
+}
+
+/** Progress within the current rank toward the next one (dashboard card). */
+export function rankProgress(rating) {
+  const r = rating ?? 1000;
+  const asc = [...RANK_STEPS].sort((a, b) => a[0] - b[0]);
+  let idx = 0;
+  asc.forEach(([min], i) => {
+    if (r >= min) idx = i;
+  });
+  const current = asc[idx];
+  const next = asc[idx + 1] ?? null;
+  if (!next) return { current: current[1], next: null, nextMin: null, remaining: 0, pct: 100 };
+  const floor = Number.isFinite(current[0]) ? current[0] : 0;
+  const span = Math.max(1, next[0] - floor);
+  const into = Math.max(0, r - floor);
+  return {
+    current: current[1],
+    next: next[1],
+    nextMin: next[0],
+    remaining: Math.max(0, next[0] - r),
+    pct: Math.min(100, Math.round((into / span) * 100)),
+  };
 }
 
 /** MVP languages (PRD §8) with display labels. */

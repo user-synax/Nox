@@ -4,8 +4,9 @@ import { use, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRight, CalendarDays, Check, GitBranch, Globe } from "lucide-react";
-import { auth } from "../../../lib/auth";
+import { auth, rankFor } from "../../../lib/auth";
 import { Avatar } from "../../../components/Avatar";
+import { RankBadge } from "../../../components/Leaderboard";
 import { StatNumber } from "../../../components/Stat";
 
 const HOVER =
@@ -174,6 +175,7 @@ export default function PublicProfilePage({ params }) {
                   </h1>
                   <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-ink-muted">
                     <span>@{data.user.username}</span>
+                    <RankBadge rank={rankFor(data.stats?.rating ?? 1000)} />
                     {data.user.joinedAt ? (
                       <span className="inline-flex items-center gap-1">
                         <CalendarDays size={13} aria-hidden="true" />

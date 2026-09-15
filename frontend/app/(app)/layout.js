@@ -23,7 +23,7 @@ function ShellSkeleton() {
           ))}
         </div>
       </div>
-      <div className="mx-auto w-full max-w-[1000px] animate-pulse px-5 pt-6 sm:px-8 lg:pt-10">
+      <div className="mx-auto w-full max-w-[1200px] animate-pulse px-5 pt-6 sm:px-8 lg:pt-10">
         <div className="h-9 w-64 max-w-full rounded-md bg-surface-1" />
         <div className="mt-2 h-4 w-40 rounded bg-surface-1" />
         <div className="mt-8 grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -52,7 +52,7 @@ export default function AppLayout({ children }) {
       <div className="min-h-screen bg-canvas font-body text-ink lg:pl-[248px]">
         <Sidebar user={session.user} pathname={pathname} />
         <MobileTop user={session.user} />
-        <main className="mx-auto w-full max-w-[1000px] px-5 pt-6 pb-28 sm:px-8 lg:pt-10 lg:pb-16">
+        <main className="mx-auto w-full max-w-[1200px] px-5 pt-6 pb-28 sm:px-8 lg:pt-10 lg:pb-16">
           {children}
         </main>
         <TabBar user={session.user} pathname={pathname} />

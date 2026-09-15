@@ -38,14 +38,6 @@ function Logo({ size = 36 }) {
   );
 }
 
-function SoonBadge() {
-  return (
-    <span className="ml-auto rounded-pill bg-surface-2 px-2 py-0.5 text-[11px] font-medium tracking-[-0.11px] text-ink-muted">
-      Soon
-    </span>
-  );
-}
-
 const itemCls = (active) =>
   `Nox-focus flex items-center gap-3 rounded-md px-3 py-2.5 text-[14px] font-medium no-underline ${HOVER} ${
     active ? "bg-surface-2 text-ink" : "bg-transparent text-ink-muted hover:bg-surface-1 hover:text-ink"
@@ -107,11 +99,14 @@ export function Sidebar({ user, pathname }) {
               <Compass size={17} strokeWidth={2} aria-hidden="true" />
               Challenges
             </Link>
-            <span aria-disabled="true" className={`${itemCls(false)} cursor-not-allowed opacity-70`}>
+            <Link
+              href="/leaderboard"
+              aria-current={pathname.startsWith("/leaderboard") ? "page" : undefined}
+              className={itemCls(pathname.startsWith("/leaderboard"))}
+            >
               <Trophy size={17} strokeWidth={2} aria-hidden="true" />
               Leaderboard
-              <SoonBadge />
-            </span>
+            </Link>
           </div>
         </div>
 
@@ -193,6 +188,7 @@ export function TabBar({ user, pathname }) {
   const tabs = [
     { href: "/dashboard", label: "Home", Icon: LayoutDashboard, active: pathname === "/dashboard" },
     { href: "/challenges", label: "Challenges", Icon: Compass, active: pathname.startsWith("/challenges") },
+    { href: "/leaderboard", label: "Ranks", Icon: Trophy, active: pathname.startsWith("/leaderboard") },
     { href: profileHref, label: "Profile", Icon: User, active: pathname === profileHref },
     { href: "/settings", label: "Settings", Icon: Settings, active: pathname === "/settings" },
   ];
@@ -202,7 +198,7 @@ export function TabBar({ user, pathname }) {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-hairline-soft bg-canvas/95 backdrop-blur lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div className="grid grid-cols-4 px-2 pt-1">
+      <div className="grid grid-cols-5 px-2 pt-1">
         {tabs.map(({ href, label, Icon, active }) => (
           <Link
             key={href + label}

@@ -31,6 +31,13 @@ export async function connectDB(uri) {
   await db
     .collection("profileStats")
     .createIndex({ userId: 1 }, { unique: true, name: "profileStats_userId_unique" });
+  // Leaderboard sort paths (PRD §16): rating ladder + XP race.
+  await db
+    .collection("profileStats")
+    .createIndex({ rating: -1, xp: -1 }, { name: "profileStats_rating_xp" });
+  await db
+    .collection("profileStats")
+    .createIndex({ xp: -1, rating: -1 }, { name: "profileStats_xp_rating" });
 
   // Dev-only email outbox (see auth.js) — fast lookup by email.
   await db
@@ -75,6 +82,13 @@ export async function connectDB(uri) {
   await db
     .collection("ratingEvents")
     .createIndex({ userId: 1, createdAt: -1 }, { name: "ratingEvents_user_created" });
+  // Weekly track filters (language/category leaderboards, §16).
+  await db
+    .collection("ratingEvents")
+    .createIndex({ createdAt: -1, language: 1 }, { name: "ratingEvents_created_lang" });
+  await db
+    .collection("ratingEvents")
+    .createIndex({ createdAt: -1, category: 1 }, { name: "ratingEvents_created_cat" });
 
   // Worker heartbeats (liveness for the execution queue status).
   await db
