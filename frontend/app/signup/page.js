@@ -153,8 +153,8 @@ export default function SignupPage() {
         password: password.value,
         username: username.value.trim(),
       });
-      // No verification step — the account is live, go straight in.
-      router.push("/");
+      // No verification step — straight into onboarding.
+      router.push("/onboarding");
       router.refresh();
     } catch (err) {
       const mapped = toFieldError(err);

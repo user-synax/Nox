@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
+import { auth } from "../lib/auth";
+import { useSession } from "../lib/useSession";
+import { SessionNav } from "../components/SessionNav";
 
 const NAV_LINKS = [
   { label: "Building...", href: "/challenges" },
@@ -24,6 +28,8 @@ export default function Home() {
   const pillRef = useRef(null);
   const tabRefs = useRef([]);
   const closeTimer = useRef(null);
+  const router = useRouter();
+  const { session, loading: sessionLoading } = useSession();
 
   /* transitions-dev 16-tabs-sliding.md orchestration — adapted selectors.
      Snaps without transition on first paint/resize (transition: none + reflow). */
@@ -184,26 +190,9 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right — secondary + primary pills; single primary stays on mobile bar */}
+            {/* Right — session-aware cluster + mobile hamburger */}
             <div className="flex shrink-0 items-center gap-2">
-              <Link
-                href="/login"
-                className={`Nox-focus hidden rounded-pill bg-surface-1 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline hover:bg-surface-2 min-[810px]:inline-flex ${HOVER}`}
-              >
-                Log in
-              </Link>
-              <Link
-                href="/signup"
-                className={`Nox-focus hidden rounded-pill bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black no-underline sm:inline-flex ${HOVER} ${PRESS}`}
-              >
-                Start Noxing
-              </Link>
-              <Link
-                href="/signup"
-                className={`Nox-focus inline-flex rounded-pill bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black no-underline sm:hidden ${HOVER} ${PRESS}`}
-              >
-                Start
-              </Link>
+              <SessionNav session={session} loading={sessionLoading} />
 
               {/* Mobile hamburger — 40px circle per button-icon-circular */}
               <button
@@ -278,22 +267,61 @@ export default function Home() {
                 </ul>
                 <div className="my-2 border-t border-hairline-soft" />
                 <div className="flex flex-col gap-2 p-1">
-                  <Link
-                    href="/login"
-                    tabIndex={mobileOpen ? 0 : -1}
-                    onClick={closeMobile}
-                    className={`Nox-focus inline-flex w-full items-center justify-center rounded-pill bg-surface-2 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline ${HOVER}`}
-                  >
-                    Log in
-                  </Link>
-                  <Link
-                    href="/signup"
-                    tabIndex={mobileOpen ? 0 : -1}
-                    onClick={closeMobile}
-                    className={`Nox-focus inline-flex w-full items-center justify-center rounded-pill bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black no-underline ${HOVER} ${PRESS}`}
-                  >
-                    Start Noxing
-                  </Link>
+                  {!sessionLoading && session?.user ? (
+                    <>
+                      <Link
+                        href={`/u/${session.user.username}`}
+                        tabIndex={mobileOpen ? 0 : -1}
+                        onClick={closeMobile}
+                        className={`Nox-focus inline-flex w-full items-center justify-center rounded-pill bg-surface-2 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline ${HOVER}`}
+                      >
+                        Profile
+                      </Link>
+                      <Link
+                        href="/settings"
+                        tabIndex={mobileOpen ? 0 : -1}
+                        onClick={closeMobile}
+                        className={`Nox-focus inline-flex w-full items-center justify-center rounded-pill bg-surface-2 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline ${HOVER}`}
+                      >
+                        Settings
+                      </Link>
+                      <button
+                        type="button"
+                        tabIndex={mobileOpen ? 0 : -1}
+                        onClick={async () => {
+                          closeMobile();
+                          try {
+                            await auth.logout();
+                          } catch {
+                            /* already gone */
+                          }
+                          router.refresh();
+                        }}
+                        className={`Nox-focus inline-flex w-full cursor-pointer items-center justify-center rounded-pill border-0 bg-transparent px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-danger ${HOVER}`}
+                      >
+                        Log out
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Link
+                        href="/login"
+                        tabIndex={mobileOpen ? 0 : -1}
+                        onClick={closeMobile}
+                        className={`Nox-focus inline-flex w-full items-center justify-center rounded-pill bg-surface-2 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline ${HOVER}`}
+                      >
+                        Log in
+                      </Link>
+                      <Link
+                        href="/signup"
+                        tabIndex={mobileOpen ? 0 : -1}
+                        onClick={closeMobile}
+                        className={`Nox-focus inline-flex w-full items-center justify-center rounded-pill bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black no-underline ${HOVER} ${PRESS}`}
+                      >
+                        Start Noxing
+                      </Link>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

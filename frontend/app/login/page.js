@@ -135,7 +135,9 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await auth.login({ email: email.value.trim(), password: password.value });
-      router.push("/");
+      // Fresh users land in onboarding, everyone else goes home.
+      const { user } = await auth.meFull();
+      router.push(user?.onboardingCompleted ? "/" : "/onboarding");
       router.refresh();
     } catch (err) {
       const mapped = toFieldError(err);

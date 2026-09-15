@@ -7,6 +7,7 @@ import { env } from "./env.js";
 import { connectDB } from "./db.js";
 import { createAuth } from "./auth.js";
 import { createAuthRoutes } from "./routes/auth.js";
+import { createUserRoutes } from "./routes/users.js";
 
 // Connect first: auth + indexes depend on the database.
 // A missing/unreachable MongoDB fails fast here with a clear message.
@@ -63,6 +64,10 @@ app.use(express.json({ limit: "100kb" }));
 // frontend can use either base without CORS surprises.
 app.use(createAuthRoutes(auth, db));
 app.use("/api", createAuthRoutes(auth, db));
+
+// PRD §29 Users surface (public profiles + self edits + avatar uploads).
+app.use(createUserRoutes(auth, db));
+app.use("/api", createUserRoutes(auth, db));
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });

@@ -65,6 +65,28 @@ async function request(path, { method = "GET", body } = {}) {
   return data;
 }
 
+/** Multipart variant (avatar upload) — the browser sets the boundary. */
+async function requestForm(path, form) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    /* non-JSON */
+  }
+  if (!res.ok) {
+    const err = new Error(data?.error ?? data?.message ?? "Upload failed. Try again.");
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
 export const auth = {
   register: ({ email, password, username, displayName }) =>
     request("/auth/register", {
@@ -91,7 +113,57 @@ export const auth = {
       method: "POST",
       body: { email, callbackURL: "/" },
     }),
+  // ── Profile (PRD §6 / §28) ──
+  /** Fresh session user + stats (includes onboarding flag). Null when signed out. */
+  meFull: () => request("/users/me"),
+  /** Partial profile save — displayName, bio, website, githubUrl, interests, preferredLanguages. */
+  updateProfile: (data) =>
+    fetch(`${API_BASE}/users/me`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    }).then(async (res) => {
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        const err = new Error(json?.error ?? "Could not save profile.");
+        err.status = res.status;
+        err.issues = json?.issues ?? null;
+        throw err;
+      }
+      return json;
+    }),
+  /** Final onboarding save — stamps completion on first call. */
+  completeOnboarding: (data) =>
+    request("/users/me/onboarding", { method: "POST", body: data ?? {} }),
+  /** Avatar upload (JPEG/PNG/WebP ≤ 2 MB) → { avatarUrl }. */
+  uploadAvatar: (file) => {
+    const form = new FormData();
+    form.append("avatar", file);
+    return requestForm("/users/me/avatar", form);
+  },
+  /** Public profile — no session needed. */
+  publicProfile: (username) =>
+    request(`/users/${encodeURIComponent(username)}`),
 };
+
+/** MVP languages (PRD §8) with display labels. */
+export const LANGUAGES = [
+  { slug: "javascript", label: "JavaScript" },
+  { slug: "typescript", label: "TypeScript" },
+  { slug: "Python", label: "Python" },
+];
+
+/** Challenge categories as onboarding interests (PRD §7.3). */
+export const INTERESTS = [
+  { slug: "general", label: "General Debugging" },
+  { slug: "algorithms", label: "Algorithms / Logic" },
+  { slug: "frontend", label: "Frontend" },
+  { slug: "backend", label: "Backend" },
+  { slug: "security", label: "Security" },
+  { slug: "database", label: "Database" },
+  { slug: "performance", label: "Performance" },
+];
 
 /**
  * Map a request() error onto { field, message } for the auth forms:

@@ -18,6 +18,11 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  // Appwrite avatar storage (all four or none — avatar upload 503s until set).
+  APPWRITE_ENDPOINT: z.string().url().optional(),
+  APPWRITE_PROJECT_ID: z.string().min(1).optional(),
+  APPWRITE_BUCKET_AVATARS: z.string().min(1).optional(),
+  APPWRITE_API_KEY: z.string().min(1).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -36,6 +41,22 @@ if (
 ) {
   console.error("[env] GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together.");
   process.exit(1);
+}
+
+{
+  const appwriteKeys = [
+    "APPWRITE_ENDPOINT",
+    "APPWRITE_PROJECT_ID",
+    "APPWRITE_BUCKET_AVATARS",
+    "APPWRITE_API_KEY",
+  ];
+  const set = appwriteKeys.filter((k) => parsed.data[k]);
+  if (set.length > 0 && set.length < appwriteKeys.length) {
+    console.error(
+      `[env] Partial Appwrite config (${set.join(", ")}). Set all of ${appwriteKeys.join(", ")} or none — avatar uploads stay disabled until complete.`
+    );
+    process.exit(1);
+  }
 }
 
 export const env = parsed.data;

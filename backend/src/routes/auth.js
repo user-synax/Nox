@@ -26,8 +26,7 @@ import { env, isDev } from "../env.js";
  * 422 taken username/email, 429 rate-limited).
  */
 
-function toWebHeaders(req) {
-  const headers = new Headers();
+export function toWebHeaders(req) {  const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
     if (value === undefined) continue;
     headers.set(key, Array.isArray(value) ? value.join(", ") : String(value));
@@ -71,7 +70,7 @@ async function forward(expressRes, webResponse) {
 export function sanitizeUser(u) {
   if (!u) return null;
   return {
-    id: u.id,
+    id: u.id ?? u._id?.toString?.() ?? null,
     email: u.email,
     username: u.username ?? null,
     displayName: u.displayName ?? u.name ?? null,
@@ -81,6 +80,9 @@ export function sanitizeUser(u) {
     githubUrl: u.githubUrl ?? null,
     roles: u.roles ?? ["USER"],
     emailVerified: !!u.emailVerified,
+    interests: u.interests ?? [],
+    onboardingCompleted: !!u.onboardingCompletedAt,
+    onboardingCompletedAt: u.onboardingCompletedAt ?? null,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
   };

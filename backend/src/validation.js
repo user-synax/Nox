@@ -89,3 +89,50 @@ export const resetPasswordSchema = z.object({
   token: z.string().min(1, "Reset token is required."),
   password: passwordSchema,
 });
+
+/* ── Profile / onboarding (PRD §6 + §28) ─────────────────────────── */
+
+/** MVP languages (PRD §8). Slugs double as UI chip keys. */
+export const LANGUAGES = ["javascript", "typescript", "Python"];
+
+/** Challenge categories repurposed as onboarding interests (PRD §7.3). */
+export const INTERESTS = [
+  "general",
+  "algorithms",
+  "frontend",
+  "backend",
+  "security",
+  "database",
+  "performance",
+];
+
+/** Optional URL: "" clears the field, otherwise scheme is auto-added server-side. */
+const optionalUrlSchema = (message) =>
+  z
+    .string()
+    .trim()
+    .max(200, message)
+    .refine((v) => v === "" || /^(https?:\/\/)?[\w-]+(\.[\w-]+)+(:\d+)?(\/\S*)?$/.test(v), {
+      message,
+    });
+
+/** PATCH /users/me + POST /users/me/onboarding — all keys optional, applied when present. */
+export const profileUpdateSchema = z.object({
+  displayName: z.string().trim().min(1, "Display name can't be empty.").max(40).optional(),
+  bio: z.string().trim().max(160, "Bio must be at most 160 characters.").optional(),
+  website: optionalUrlSchema("Enter a valid URL.").optional(),
+  githubUrl: optionalUrlSchema("Enter a valid GitHub URL.")
+    .refine(
+      (v) =>
+        v === "" ||
+        /^(https?:\/\/)?(www\.)?github\.com(\/|$)/i.test(v),
+      { message: "GitHub URL must point to github.com." }
+    )
+    .optional(),
+  preferredLanguages: z.array(z.enum(LANGUAGES)).min(1).max(10).optional(),
+  interests: z.array(z.enum(INTERESTS)).max(INTERESTS.length).optional(),
+});
+
+/** Avatar upload guards (multer enforces size; route enforces mime). */
+export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+export const AVATAR_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];

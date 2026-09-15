@@ -154,6 +154,82 @@ const meAliased = await fetch(`${BASE}/api/auth/me`, {
 }).then((r) => r.json());
 check("/api/auth/me alias works", meAliased?.user?.email === EMAIL);
 
+// ── Profile surface (PRD §6 / §28) ──
+const patchBadRes = await fetch(`${BASE}/users/me`, {
+  method: "PATCH",
+  headers: { "Content-Type": "application/json", Cookie: login.cookie ?? "" },
+  body: JSON.stringify({ githubUrl: "not-a-url" }),
+});
+check("profile rejects bad github URL (422)", patchBadRes.status === 422, `got ${patchBadRes.status}`);
+
+const patchRes = await fetch(`${BASE}/users/me`, {
+  method: "PATCH",
+  headers: { "Content-Type": "application/json", Cookie: login.cookie ?? "" },
+  body: JSON.stringify({
+    displayName: "Smoke Tester",
+    bio: "Breaks things on purpose.",
+    website: "example.com",
+    githubUrl: "https://github.com/smoketester",
+    interests: ["backend", "security"],
+    preferredLanguages: ["typescript"],
+  }),
+}).then((r) => r.json().then((json) => ({ status: r.status, json })));
+check(
+  "profile PATCH saves + normalizes URLs",
+  patchRes.status === 200 &&
+    patchRes.json?.user?.displayName === "Smoke Tester" &&
+    patchRes.json?.user?.website === "https://example.com" &&
+    patchRes.json?.stats?.preferredLanguages?.includes("typescript"),
+  `got ${patchRes.status} ${JSON.stringify(patchRes.json)?.slice(0, 160)}`
+);
+
+const pub = await fetch(`${BASE}/users/${USER}`).then((r) =>
+  r.json().then((json) => ({ status: r.status, json }))
+);
+check(
+  "public profile hides email, shows PRD fields",
+  pub.status === 200 &&
+    pub.json?.user?.email === undefined &&
+    pub.json?.user?.username === USER &&
+    pub.json?.user?.bio === "Breaks things on purpose." &&
+    typeof pub.json?.stats?.rating === "number",
+  `got ${pub.status}`
+);
+
+const missing = await fetch(`${BASE}/users/does_not_exist_zzz`).then((r) => r.status);
+check("unknown profile → 404", missing === 404, `got ${missing}`);
+
+// Avatar: 1×1 PNG. 503 while Appwrite is unconfigured, 200 + URL once live.
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64"
+);
+const form = new FormData();
+form.append("avatar", new Blob([png], { type: "image/png" }), "avatar.png");
+const avatarRes = await fetch(`${BASE}/users/me/avatar`, {
+  method: "POST",
+  headers: { Cookie: login.cookie ?? "" },
+  body: form,
+});
+const avatarJson = await avatarRes.json().catch(() => null);
+check(
+  "avatar upload: 503 unconfigured OR 200 with URL",
+  (avatarRes.status === 503 && /not configured/.test(avatarJson?.error ?? "")) ||
+    (avatarRes.status === 200 && /^https?:\/\//.test(avatarJson?.avatarUrl ?? "")),
+  `got ${avatarRes.status} ${JSON.stringify(avatarJson)}`
+);
+
+const onboard = await post(
+  "/users/me/onboarding",
+  { displayName: "Smoke Tester" },
+  login.cookie
+);
+check(
+  "onboarding completes + stamps flag",
+  onboard.status === 200 && onboard.json?.user?.onboardingCompleted === true,
+  `got ${onboard.status} ${JSON.stringify(onboard.json?.user)?.slice(0, 120)}`
+);
+
 const forgot = await post("/auth/forgot-password", { email: EMAIL });
 check("forgot-password generic success", forgot.status === 200 && forgot.json?.status === true, `got ${forgot.status}`);
 

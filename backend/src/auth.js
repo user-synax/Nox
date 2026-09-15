@@ -7,6 +7,7 @@ import {
   emailDomainAllowed,
   ALLOWED_EMAIL_DOMAINS,
 } from "./validation.js";
+import { defaultProfileStats } from "./lib/stats.js";
 
 /**
  * Better Auth instance — email/password today, Google config-ready.
@@ -96,6 +97,17 @@ export function createAuth(db) {
         website: { type: "string", required: false, input: false },
         githubUrl: { type: "string", required: false, input: false },
         avatarUrl: { type: "string", required: false, input: false },
+        // Appwrite file id behind avatarUrl (lets us delete replaces).
+        avatarFileId: { type: "string", required: false, input: false },
+        // Onboarding picks (PRD §4.1): category slugs, see validation.js.
+        interests: {
+          type: "string[]",
+          required: false,
+          defaultValue: [],
+          input: false,
+        },
+        // Set when the onboarding wizard completes (null = fresh user).
+        onboardingCompletedAt: { type: "date", required: false, input: false },
         roles: {
           type: "string[]",
           required: false,
@@ -164,29 +176,9 @@ export function createAuth(db) {
           // Best-effort: a stats failure must never fail the signup itself.
           async after(user) {
             try {
-              const now = new Date();
               await db.collection("profileStats").updateOne(
                 { userId: user.id },
-                {
-                  $setOnInsert: {
-                    userId: user.id,
-                    rating: 1000,
-                    xp: 0,
-                    level: 1,
-                    currentStreak: 0,
-                    longestStreak: 0,
-                    lastActiveDate: null,
-                    solvedCount: 0,
-                    acceptedCount: 0,
-                    attemptCount: 0,
-                    successRate: 0,
-                    hardestSolvedChallengeId: null,
-                    preferredLanguages: [],
-                    skills: {},
-                    createdAt: now,
-                    updatedAt: now,
-                  },
-                },
+                { $setOnInsert: defaultProfileStats(user.id) },
                 { upsert: true }
               );
             } catch (err) {
