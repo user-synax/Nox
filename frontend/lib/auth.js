@@ -179,3 +179,19 @@ export function toFieldError(err) {
   if (/password/i.test(msg)) return { field: "password", message: msg };
   return null;
 }
+
+/**
+ * Clears a stale server session, then sends the user to /login.
+ * App-shell gates use this instead of a bare redirect: without it, an
+ * expired (but still present) cookie would bounce /login → /dashboard
+ * forever via middleware. signOut always clears cookies, even for dead
+ * sessions, so the loop can never form.
+ */
+export async function signOutAndLogin(router) {
+  try {
+    await auth.logout();
+  } catch {
+    /* session already gone — the redirect is what matters */
+  }
+  router.replace("/login");
+}

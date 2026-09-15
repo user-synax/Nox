@@ -66,7 +66,7 @@ export default function OnboardingPage() {
       .then(({ user, stats }) => {
         if (!alive) return;
         if (user.onboardingCompleted) {
-          router.replace("/");
+          router.replace("/dashboard");
           return;
         }
         setUsername(user.username ?? "");
@@ -164,7 +164,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (!done) return;
     const t = setTimeout(() => {
-      router.push("/");
+      router.push("/dashboard");
       router.refresh();
     }, 3200);
     return () => clearTimeout(t);
@@ -208,7 +208,7 @@ export default function OnboardingPage() {
             <button
               type="button"
               onClick={() => {
-                router.push("/");
+                router.push("/dashboard");
                 router.refresh();
               }}
               className={`Nox-focus mt-8 inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-pill border-0 bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black ${HOVER} ${PRESS}`}

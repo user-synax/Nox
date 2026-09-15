@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { auth, LANGUAGES, INTERESTS } from "../../lib/auth";
-import { AvatarPicker } from "../../components/AvatarPicker";
-import { SelectChip } from "../../components/SelectChip";
-import { Toast } from "../../components/Toast";
+import { auth, LANGUAGES, INTERESTS } from "../../../lib/auth";
+import { AvatarPicker } from "../../../components/AvatarPicker";
+import { SelectChip } from "../../../components/SelectChip";
+import { Toast } from "../../../components/Toast";
 
 const HOVER =
   "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]";
@@ -15,7 +13,6 @@ const PRESS =
   "transition-transform duration-[var(--duration-quick)] ease-[var(--ease-smooth-out)] active:scale-[0.97]";
 
 export default function SettingsPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState("");
   const [avatarUrl, setAvatarUrl] = useState(null);
@@ -47,11 +44,17 @@ export default function SettingsPage() {
         setInterests(user.interests ?? []);
         setLoading(false);
       })
-      .catch(() => router.replace("/login"));
+      // The (app) shell owns the session gate — a failure here is a real
+      // error, not a redirect.
+      .catch(() => {
+        if (!alive) return;
+        setFormError("Could not load your profile. Try again.");
+        setLoading(false);
+      });
     return () => {
       alive = false;
     };
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     if (loading) return;
@@ -107,46 +110,29 @@ export default function SettingsPage() {
     }
   };
 
-  const onLogout = async () => {
-    try {
-      await auth.logout();
-    } catch {
-      /* session already gone */
-    }
-    router.push("/");
-    router.refresh();
-  };
-
   const inputCls =
     "Nox-focus w-full rounded-md bg-surface-1 px-[14px] py-[10px] text-[15px] text-ink outline-none placeholder:text-ink-muted";
 
   return (
-    <div className="flex min-h-screen flex-col bg-canvas font-body text-ink">
-      <main className="mx-auto w-full max-w-[1199px] flex-1 px-5 py-8 sm:px-[30px]">
-        <div className="mx-auto w-full max-w-[640px]">
-          <div className="mb-8 flex items-center justify-between">
-            <Link href="/" aria-label="Nox home" className="Nox-focus block rounded-[14px]">
-              <span className="block h-10 w-10 overflow-hidden rounded-[12px]">
-                <Image
-                  src="/Nox-logo.png"
-                  alt=""
-                  aria-hidden="true"
-                  width={40}
-                  height={40}
-                  sizes="40px"
-                  className="h-10 w-10 object-cover"
-                />
-              </span>
-            </Link>
-            {username ? (
-              <Link
-                href={`/u/${username}`}
-                className={`Nox-focus inline-flex min-h-[40px] items-center rounded-pill bg-surface-1 px-[15px] py-2 text-[14px] font-medium text-ink no-underline hover:bg-surface-2 ${HOVER}`}
-              >
-                View public profile
-              </Link>
-            ) : null}
-          </div>
+    <div className="mx-auto w-full max-w-[640px]">
+      <div className="mb-8 flex items-end justify-between gap-3">
+        <div>
+          <h1 className="Nox-display text-[30px] leading-[1.1] font-medium tracking-[-1px]">
+            Settings
+          </h1>
+          <p className="mt-2 text-[15px] text-ink-muted">
+            Signed in as @{username} · your handle never changes.
+          </p>
+        </div>
+        {username ? (
+          <Link
+            href={`/u/${username}`}
+            className={`Nox-focus hidden shrink-0 items-center rounded-pill bg-surface-1 px-[15px] py-2 text-[14px] font-medium text-ink no-underline hover:bg-surface-2 sm:inline-flex ${HOVER}`}
+          >
+            View profile
+          </Link>
+        ) : null}
+      </div>
 
           {loading ? (
             <div className="animate-pulse" aria-hidden="true">
@@ -309,14 +295,7 @@ export default function SettingsPage() {
                   </div>
                 </section>
 
-                <div className="flex items-center justify-between gap-3 border-t border-hairline-soft pt-6">
-                  <button
-                    type="button"
-                    onClick={onLogout}
-                    className={`Nox-focus cursor-pointer rounded-pill px-[15px] py-[10px] text-[14px] font-medium text-danger hover:bg-surface-1 ${HOVER}`}
-                  >
-                    Log out
-                  </button>
+                <div className="flex items-center justify-end gap-3 border-t border-hairline-soft pt-6">
                   <button
                     type="submit"
                     disabled={busy}
@@ -328,8 +307,6 @@ export default function SettingsPage() {
               </form>
             </div>
           )}
-        </div>
-      </main>
       <Toast toast={toast} />
     </div>
   );
