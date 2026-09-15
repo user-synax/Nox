@@ -5,57 +5,51 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  /* Patch DESIGN.md — Colors */
-  --color-background: #080b0f;
-  --color-surface: #11161c;
-  --color-surface-elevated: #171d24;
-  --color-primary: #4ba9e1;
-  --color-primary-hover: #3d99d0;
-  --color-text-primary: #f5f7fa;
-  --color-text-secondary: #98a2b3;
-  --color-border: #222a33;
-  --color-border-hover: #31404d;
-  --color-success: #36d399;
-  --color-warning: #f5c451;
+  /* DESIGN.md (alpha) — Colors */
+  --color-canvas: #090909;
+  --color-surface-1: #141414;
+  --color-surface-2: #1c1c1c;
+  --color-hairline: #262626;
+  --color-hairline-soft: #1a1a1a;
+  --color-ink: #ffffff;
+  --color-ink-muted: #999999;
+  --color-accent-blue: #4ba9e1;
+  --color-success: #22c55e;
   --color-danger: #f45d6f;
-  --color-disabled: #4a5560;
+  --color-gradient-magenta: #d44df0;
+  --color-gradient-violet: #6a4cf5;
+  --color-gradient-orange: #ff7a3d;
+  --color-gradient-coral: #ff5577;
 
-  /* Patch DESIGN.md — Typography */
-  --font-geist: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-geist-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* DESIGN.md — Typography (GT Walsheim → Geist substitute, Inter body) */
+  --font-display: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  /* Patch DESIGN.md — Type Scale */
-  --text-caption: 12px;
-  --text-body-sm: 13px;
-  --text-body: 14px;
-  --text-body-lg: 16px;
-  --text-heading-sm: 18px;
-  --text-heading: 24px;
-  --text-heading-lg: 32px;
-  --text-display: 48px;
+  /* DESIGN.md — Type scale */
+  --text-micro: 12px;
+  --text-caption: 13px;
+  --text-body-sm: 14px;
+  --text-body: 15px;
+  --text-body-lg: 18px;
+  --text-subhead: 24px;
+  --text-display-md: 32px;
 
-  /* Patch DESIGN.md — Spacing */
-  --spacing-4: 4px;
-  --spacing-8: 8px;
-  --spacing-12: 12px;
-  --spacing-16: 16px;
-  --spacing-20: 20px;
-  --spacing-24: 24px;
-  --spacing-32: 32px;
-  --spacing-40: 40px;
-  --spacing-48: 48px;
-  --spacing-64: 64px;
-  --spacing-80: 80px;
-
-  /* Patch DESIGN.md — Radius */
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  /* DESIGN.md — Radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 15px;
+  --radius-xl: 20px;
+  --radius-xxl: 30px;
+  --radius-pill: 100px;
   --radius-full: 9999px;
 
-  /* Patch DESIGN.md — Shadows (floating only, no glow/glass) */
-  --shadow-floating: rgba(0, 0, 0, 0.35) 0px 8px 24px -4px;
+  /* DESIGN.md — Elevation (flat canvas; light-edge + drop for floating cards) */
+  --shadow-floating: rgba(255, 255, 255, 0.1) 0 0 0 0.5px, rgba(0, 0, 0, 0.25) 0px 10px 30px 0px;
+  --shadow-ring-focus: rgba(0, 153, 255, 0.15) 0px 0px 0px 1px;
+  --shadow-ring-error: rgba(244, 93, 111, 0.25) 0px 0px 0px 1px;
 }
 
 /* transitions-dev — universal motion tokens + navbar subset.
@@ -101,38 +95,55 @@
   --icon-swap-start-scale: 0.25;
   --icon-swap-ease: ease-in-out;
 
-  /* Tabs sliding (16-tabs-sliding.md) — Patch dark adaptation via tunable vars only */
+  /* Tabs sliding (16-tabs-sliding.md) — retuned to pricing-tab tokens:
+     default = canvas/muted, selected = surface-2 lift + ink */
   --tabs-dur: 250ms;
   --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --tabs-text-muted: #98a2b3;
-  --tabs-text-active: #f5f7fa;
+  --tabs-text-muted: #999999;
+  --tabs-text-active: #ffffff;
   --tabs-bar-bg: transparent;
-  --tabs-pill-bg: #171d24;
+  --tabs-pill-bg: #1c1c1c;
+
+  /* Panel reveal (07-panel-reveal.md) — navbar entrance */
+  --panel-open-dur: 400ms;
+  --panel-close-dur: 350ms;
+  --panel-translate-y: 100px;
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Error state shake (12-error-state-shake.md) — auth validation */
+  --shake-distance: 6px;
+  --shake-overshoot: 4px;
+  --shake-dur-a: 80ms;
+  --shake-dur-b: 60ms;
+  --shake-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --revert-hold: 3000ms;
+  --revert-dur: 280ms;
 }
 
 @layer base {
   * {
-    border-color: var(--color-border);
+    border-color: var(--color-hairline-soft);
   }
   html {
-    background: var(--color-background);
-    font-family: var(--font-geist);
+    background: var(--color-canvas);
+    font-family: var(--font-body);
   }
   body {
-    background: var(--color-background);
-    color: var(--color-text-primary);
-    font-family: var(--font-geist);
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    font-feature-settings: "cv01", "cv05", "cv09", "cv11", "ss03", "ss07", "dlig";
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
   ::selection {
-    background: rgba(75, 169, 225, 0.28);
-    color: var(--color-text-primary);
+    background: rgba(75, 169, 225, 0.35);
+    color: var(--color-ink);
   }
   :focus-visible {
     outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px rgba(75, 169, 225, 0.2);
+    box-shadow: var(--shadow-ring-focus);
   }
 }
 
@@ -262,17 +273,118 @@
   }
 }
 
-/* Patch navbar — DESIGN.md compliant extras only:
-   1px hairline border on sliding pill, focus ring, mono numerals. */
-.t-tabs-pill.patch-tabs-pill {
-  border: 1px solid var(--color-border);
+/* ── transitions-dev 07-panel-reveal.md — verbatim ── */
+.t-panel-slide {
+  transform: translateY(var(--panel-translate-y));
+  opacity: 0;
+  filter: blur(var(--panel-blur));
+  pointer-events: none;
+  transition:
+    transform var(--panel-close-dur) var(--panel-ease),
+    opacity var(--panel-close-dur) var(--panel-ease),
+    filter var(--panel-close-dur) var(--panel-ease);
+  will-change: transform, opacity, filter;
+}
+.t-panel-slide[data-open="true"] {
+  transform: translateY(0);
+  opacity: 1;
+  filter: blur(0);
+  pointer-events: auto;
+  transition:
+    transform var(--panel-open-dur) var(--panel-ease),
+    opacity var(--panel-open-dur) var(--panel-ease),
+    filter var(--panel-open-dur) var(--panel-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-panel-slide {
+    transition: none !important;
+  }
+}
+
+/* ── transitions-dev 12-error-state-shake.md — verbatim ── */
+.t-input {
+  transition: border-color 150ms ease-out;
+  will-change: transform;
+}
+.t-input.is-error {
+  transition: border-color var(--revert-dur, 280ms) ease-out;
+}
+.t-error-msg {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity    var(--revert-dur, 280ms) ease-out,
+    visibility 0s linear var(--revert-dur, 280ms);
+}
+.t-input-wrap.is-error .t-error-msg {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity    var(--revert-dur, 280ms) ease-out,
+    visibility 0s linear 0s;
+}
+.t-input.is-shaking {
+  animation: t-input-shake calc(
+      var(--shake-dur-a) * 2 + var(--shake-dur-b) * 2
+    ) linear;
+}
+@keyframes t-input-shake {
+  0%      { transform: translateX(0);                                 animation-timing-function: var(--shake-ease); }
+  28.57%  { transform: translateX(var(--shake-distance));             animation-timing-function: var(--shake-ease); }
+  57.14%  { transform: translateX(calc(var(--shake-distance) * -1)); animation-timing-function: var(--shake-ease); }
+  78.57%  { transform: translateX(var(--shake-overshoot));            animation-timing-function: var(--shake-ease); }
+  100%    { transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-input { animation: none !important; transform: none !important; }
+}
+
+/* Patch navbar — DESIGN.md extras only: entrance travel override (tunable var),
+   display wordmark voice, tabular numerals. */
+.patch-nav-enter {
+  --panel-translate-y: -16px;
+}
+/* Patch auth — text-input spec + error-shake hooks (own colors/type only,
+   the t-* rules above own the tweens). Border-width stays constant so the
+   error tween never shifts inner content. */
+.patch-auth-enter {
+  --panel-translate-y: 16px;
+}
+.patch-input {
+  border: 1px solid var(--color-hairline-soft);
+}
+.patch-input:focus-within {
+  border-color: var(--color-hairline);
+  box-shadow: var(--shadow-ring-focus);
+}
+.patch-input.is-error {
+  border-color: var(--color-danger);
+}
+.patch-input.is-error:focus-within {
+  border-color: var(--color-danger);
+  box-shadow: var(--shadow-ring-error);
+}
+.patch-input.is-valid {
+  border-color: var(--color-success);
+}
+.patch-input.is-valid:focus-within {
+  border-color: var(--color-success);
+  box-shadow: var(--shadow-ring-focus);
+}
+.patch-error-msg {
+  font-size: 13px;
+  line-height: 1.2;
+  letter-spacing: -0.13px;
+  color: var(--color-ink);
 }
 .patch-focus:focus-visible {
   outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(75, 169, 225, 0.2);
+  box-shadow: var(--shadow-ring-focus);
+}
+.patch-display {
+  font-family: var(--font-display);
 }
 .patch-mono {
-  font-family: var(--font-geist-mono);
+  font-family: var(--font-mono);
   font-feature-settings: "tnum" 1;
 }
