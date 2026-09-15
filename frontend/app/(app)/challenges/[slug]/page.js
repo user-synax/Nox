@@ -2,7 +2,7 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, FileCode2, FlaskConical, Lightbulb, Lock } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, FileCode2, FlaskConical, Lightbulb, Lock } from "lucide-react";
 import { auth, LANGUAGES, INTERESTS } from "../../../../lib/auth";
 import { recordRecent, swrGet } from "../../../../lib/workspace";
 import { DifficultyBadge, KIND_LABEL, formatSuccess } from "../../../../components/ChallengeBits";
@@ -181,7 +181,20 @@ export default function ChallengeDetailPage({ params }) {
       {/* Header */}
       <div className="mt-4">
         <div className="flex flex-wrap items-center gap-2">
-          <DifficultyBadge level={challenge.difficulty} />
+          {challenge.solved ? (
+            <span
+              role="status"
+              className="inline-flex items-center gap-1.5 rounded-pill bg-success/15 px-2.5 py-1 text-[12px] font-medium tracking-[-0.12px] text-success"
+            >
+              <Check size={13} strokeWidth={3} aria-hidden="true" />
+              Completed
+              {typeof challenge.solution?.score === "number" ? (
+                <span className="Nox-mono opacity-80">{challenge.solution.score} pts</span>
+              ) : null}
+            </span>
+          ) : (
+            <DifficultyBadge level={challenge.difficulty} />
+          )}
           <span className="Nox-mono rounded-pill bg-surface-1 px-2.5 py-1 text-[12px] text-ink-muted">
             {langLabel(challenge.language)}
           </span>
@@ -204,13 +217,15 @@ export default function ChallengeDetailPage({ params }) {
       <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
         <Link
           href={`/challenges/${challenge.slug}/solve`}
-          className={`Nox-focus inline-flex min-h-[44px] items-center justify-center gap-2 rounded-pill bg-white px-6 py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black no-underline ${HOVER} ${PRESS}`}
+          className={`Nox-focus inline-flex min-h-[44px] items-center justify-center gap-2 rounded-pill px-6 py-[10px] text-[14px] font-medium tracking-[-0.14px] no-underline ${challenge.solved ? "bg-surface-2 text-ink hover:bg-surface-1" : "bg-white text-black"} ${HOVER} ${PRESS}`}
         >
-          Start debugging
+          {challenge.solved ? "Review solution" : "Start debugging"}
           <ArrowRight size={15} aria-hidden="true" />
         </Link>
         <p className="text-[13px] text-ink-muted">
-          Your code autosaves as a local draft while you work.
+          {challenge.solved
+            ? "Solved — your accepted snapshot is frozen and view-only."
+            : "Your code autosaves as a local draft while you work."}
         </p>
       </div>
 

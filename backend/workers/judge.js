@@ -179,6 +179,16 @@ export async function judgeSubmit(db, job, exec) {
     { _id: job.submissionId, status: "pending" },
     { $set: update }
   );
+  // Challenge counters: every judged submit is an attempt; accepts solve.
+  if (status !== "system-error" && job.challengeId) {
+    await db
+      .collection("challenges")
+      .updateOne(
+        { _id: job.challengeId },
+        { $inc: { attemptCount: 1, ...(status === "accepted" ? { solveCount: 1 } : {}) } }
+      )
+      .catch(() => {});
+  }
   const submission = await submissions.findOne({ _id: job.submissionId });
   return { submission, score, xpAwarded, ratingDelta, firstSolve: !priorAccepted && status === "accepted" };
 }

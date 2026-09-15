@@ -363,13 +363,23 @@ export default function SolvePage({ params }) {
       setUsername(user);
       setChallenge(ch);
       recordRecent(ch.slug, ch.title);
-      const metas = (ch.starterFiles ?? []).map((f) => ({ path: f.path }));
+      // Locked (solved): render the ACCEPTED snapshot read-only. Drafts
+      // are ignored — there is nothing left to edit or retry.
+      const locked = !!ch.solved;
+      const sourceFiles =
+        locked && ch.solution?.files?.length ? ch.solution.files : ch.starterFiles ?? [];
+      const metas = sourceFiles.map((f) => ({ path: f.path }));
       const starterMap = Object.fromEntries((ch.starterFiles ?? []).map((f) => [f.path, f.content ?? ""]));
       setStarters(starterMap);
+      const solutionMap = Object.fromEntries(sourceFiles.map((f) => [f.path, f.content ?? ""]));
       const init = {};
       const dirtyMap = {};
       await Promise.all(
         metas.map(async (m) => {
+          if (locked) {
+            init[m.path] = solutionMap[m.path] ?? "";
+            return;
+          }
           const draft = user ? await loadDraft(user, ch.slug, m.path) : null;
           init[m.path] = draft ?? starterMap[m.path] ?? "";
           if (draft != null && draft !== (starterMap[m.path] ?? "")) dirtyMap[m.path] = true;
@@ -443,6 +453,7 @@ export default function SolvePage({ params }) {
   }, []);
 
   const flushSave = useCallback(() => {
+    if (challengeRef.current?.solved) return; // locked: nothing to persist
     clearTimeout(saveTimer.current);
     const editor = editorRef.current;
     if (editor && activePath) persist(activePath, editor.getValue(activePath));
@@ -653,6 +664,7 @@ export default function SolvePage({ params }) {
 
   const dirtyCount = Object.keys(dirty).length;
   const tests = challenge.visibleTests ?? [];
+  const locked = !!challenge.solved;
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas font-body text-ink">
@@ -674,7 +686,17 @@ export default function SolvePage({ params }) {
             <DifficultyBadge level={challenge.difficulty} />
           </span>
           <span className="shrink-0">
-            <SaveStatus saving={saving} dirtyCount={dirtyCount} savedAt={savedAt} />
+            {locked ? (
+              <span
+                role="status"
+                className="inline-flex min-h-[36px] items-center gap-2 rounded-pill bg-success/15 px-[14px] text-[13px] font-medium text-success"
+              >
+                <Check size={14} strokeWidth={3} aria-hidden="true" />
+                Completed
+              </span>
+            ) : (
+              <SaveStatus saving={saving} dirtyCount={dirtyCount} savedAt={savedAt} />
+            )}
           </span>
         </div>
       </header>
@@ -742,28 +764,36 @@ export default function SolvePage({ params }) {
             ))}
           </div>
           <div className="mt-3 border-t border-hairline-soft pt-3">
-            <button
-              type="button"
-              onClick={() => resetFile()}
-              className={`Nox-focus flex w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-3 py-2 text-left text-[13px] font-medium text-ink-muted hover:text-ink ${HOVER}`}
-            >
-              <RotateCcw size={13} aria-hidden="true" />
-              Reset this file
-            </button>
-            {files.length > 1 ? (
-              <button
-                type="button"
-                onClick={resetAll}
-                className={`Nox-focus flex w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-3 py-2 text-left text-[13px] font-medium text-ink-muted hover:text-ink ${HOVER}`}
-              >
-                <RotateCcw size={13} aria-hidden="true" />
-                Reset all files
-              </button>
-            ) : null}
+            {locked ? (
+              <p className="px-3 py-2 text-[12px] leading-[1.5] text-ink-muted">
+                Solved — this snapshot is frozen.
+              </p>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => resetFile()}
+                  className={`Nox-focus flex w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-3 py-2 text-left text-[13px] font-medium text-ink-muted hover:text-ink ${HOVER}`}
+                >
+                  <RotateCcw size={13} aria-hidden="true" />
+                  Reset this file
+                </button>
+                {files.length > 1 ? (
+                  <button
+                    type="button"
+                    onClick={resetAll}
+                    className={`Nox-focus flex w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-3 py-2 text-left text-[13px] font-medium text-ink-muted hover:text-ink ${HOVER}`}
+                  >
+                    <RotateCcw size={13} aria-hidden="true" />
+                    Reset all files
+                  </button>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
 
-        {/* Editor + terminal */}
+        {/* Editor + terminal (terminal only while solvable) */}
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-hairline-soft bg-[#11161C]">
           <div className="h-[62vh] min-h-[420px] flex-1 lg:h-auto lg:min-h-0">
             <CodeEditor
@@ -774,14 +804,17 @@ export default function SolvePage({ params }) {
               onContent={onContent}
               onRequestSave={flushSave}
               onToggleTerminal={toggleTerminal}
+              readOnly={locked}
             />
           </div>
-          <Terminal
-            entry={terminal}
-            open={termOpen}
-            onToggle={toggleTerminal}
-            onClear={() => setTerminal(null)}
-          />
+          {locked ? null : (
+            <Terminal
+              entry={terminal}
+              open={termOpen}
+              onToggle={toggleTerminal}
+              onClear={() => setTerminal(null)}
+            />
+          )}
         </div>
 
         {/* Tests */}
@@ -864,6 +897,38 @@ export default function SolvePage({ params }) {
             ) : null}
           </div>
           <div className="rounded-xl bg-surface-1 p-4">
+            {locked ? (
+              <div role="status">
+                <p className="flex items-center gap-2 text-[15px] font-medium text-ink">
+                  <span
+                    aria-hidden="true"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-success/15 text-success"
+                  >
+                    <Check size={14} strokeWidth={3} />
+                  </span>
+                  Completed
+                  {typeof challenge.solution?.score === "number" ? (
+                    <span className="Nox-mono ml-auto text-[13px] text-ink-muted">
+                      {challenge.solution.score} pts
+                    </span>
+                  ) : null}
+                </p>
+                <p className="mt-2 text-[13px] leading-[1.5] text-ink-muted">
+                  Accepted
+                  {challenge.solution?.solvedAt
+                    ? ` ${new Date(challenge.solution.solvedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
+                    : ""}
+                  {" "}· this snapshot is frozen. No edits, no re-runs.
+                </p>
+                <Link
+                  href="/challenges"
+                  className={`Nox-focus mt-4 inline-flex min-h-[44px] w-full items-center justify-center rounded-pill bg-white px-4 text-[14px] font-medium text-black no-underline ${HOVER}`}
+                >
+                  Back to catalog
+                </Link>
+              </div>
+            ) : (
+              <>
             <button
               type="button"
               onClick={onRun}
@@ -908,8 +973,10 @@ export default function SolvePage({ params }) {
               {runResult?.executionTimeMs != null
                 ? `Last run took ${runResult.executionTimeMs} ms. `
                 : ""}
-              Drafts autosave locally. Hidden-test judging arrives next.
+              Drafts autosave locally. Hidden tests judge on submit.
             </p>
+              </>
+            )}
             <div className="mt-3 flex gap-2 border-t border-hairline-soft pt-3 lg:hidden">
               <button
                 type="button"

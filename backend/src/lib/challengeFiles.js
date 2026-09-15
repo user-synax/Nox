@@ -20,6 +20,14 @@ export async function findPublishedChallenge(db, idParam) {
   return doc && doc.status === "published" ? doc : null;
 }
 
+/** Accepted submission for (user × challenge) — the solve lock source. */
+export function findAcceptedSubmission(db, userId, challengeId) {
+  return db
+    .collection("submissions")
+    .findOne({ userId, challengeId, status: "accepted" }, { projection: { _id: 1 } })
+    .catch(() => null);
+}
+
 export function mergeChallengeFiles(challenge, files) {
   const starters = new Map(
     (challenge?.starterFiles ?? []).map((f) => [f.path, f.content ?? ""])

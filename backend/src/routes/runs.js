@@ -4,7 +4,7 @@ import { validate } from "../middleware/validate.js";
 import { strictAuthLimit } from "../middleware/rateLimit.js";
 import { toWebHeaders } from "./auth.js";
 import { runRequestSchema, EXECUTABLE_LANGUAGES } from "../validation.js";
-import { mergeChallengeFiles } from "../lib/challengeFiles.js";
+import { mergeChallengeFiles, findAcceptedSubmission } from "../lib/challengeFiles.js";
 import { createRun, getRun, sanitizeRun } from "../../workers/queue.js";
 
 /**
@@ -69,6 +69,10 @@ export function createRunRoutes(auth, db) {
         if (!challenge.entryFile || !challenge.entryFunction) {
           console.error(`[runs] challenge ${challenge.slug} missing entry point`);
           return res.status(500).json({ error: "Challenge is misconfigured." });
+        }
+        // Solved challenges are locked: view-only, no more runs.
+        if (await findAcceptedSubmission(db, me.id, challenge._id)) {
+          return res.status(403).json({ error: "Challenge already solved." });
         }
 
         const starterPaths = new Set((challenge.starterFiles ?? []).map((f) => f.path));

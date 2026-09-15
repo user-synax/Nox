@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { ObjectId } from "mongodb";
 import { validate } from "../middleware/validate.js";
 import { toWebHeaders } from "./auth.js";
 import { challengeListQuerySchema } from "../validation.js";
@@ -10,9 +11,9 @@ import { challengeListQuerySchema } from "../validation.js";
  *   GET /challenges/:slug  → full public detail (hidden tests stripped)
  *
  * Hidden tests never leave the server on these routes — admin reads live
- * in routes/admin.js behind requireAdmin. solveCount/attemptCount are real
- * counters (0 until the submission system lands); `solved` is per-user and
- * resolves to false until submissions exist.
+ * in routes/admin.js behind requireAdmin. `solved` is real per-user state
+ * (accepted submission); solved details also carry the accepted `solution`
+ * snapshot so the workspace can render it read-only.
  */
 
 function stripHidden(doc) {
@@ -21,16 +22,44 @@ function stripHidden(doc) {
   return { id: _id?.toString?.() ?? doc.id, ...rest };
 }
 
-function withRate(doc) {
+function withRate(doc, solved) {
   if (!doc) return null;
   const attempts = doc.attemptCount ?? 0;
   const solves = doc.solveCount ?? 0;
   return {
     ...doc,
     successRate: attempts > 0 ? solves / attempts : null,
-    solved: false,
-    solvedAt: null,
+    solved: !!solved,
+    solvedAt: solved?.solvedAt ?? null,
   };
+}
+
+/** Session user id (null when anonymous) — best-effort, never throws. */
+async function sessionUserId(auth, req) {
+  try {
+    const session = await auth.api.getSession({ headers: toWebHeaders(req) });
+    return session?.user?.id ? new ObjectId(session.user.id) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Accepted submissions for (user × challenges) → solved lookup map. */
+async function acceptedMap(db, userId, challengeIds) {
+  const map = new Map();
+  if (!userId || challengeIds.length === 0) return map;
+  const rows = await db
+    .collection("submissions")
+    .find(
+      { userId, challengeId: { $in: challengeIds }, status: "accepted" },
+      { projection: { challengeId: 1, completedAt: 1 } }
+    )
+    .toArray()
+    .catch(() => []);
+  for (const r of rows) {
+    map.set(r.challengeId.toString(), { solvedAt: r.completedAt ?? null, submissionId: r._id.toString() });
+  }
+  return map;
 }
 
 function buildFilter(q) {
@@ -75,10 +104,12 @@ export function createChallengeRoutes(auth, db) {
         .toArray();
 
       let prefs = { languages: [], interests: [] };
-      if (q.sort === "recommended") {
-        try {
-          const session = await auth.api.getSession({ headers: toWebHeaders(req) });
-          if (session?.user) {
+      let userId = null;
+      try {
+        const session = await auth.api.getSession({ headers: toWebHeaders(req) });
+        if (session?.user?.id) {
+          userId = new ObjectId(session.user.id);
+          if (q.sort === "recommended") {
             const stats = await db
               .collection("profileStats")
               .findOne({ userId: session.user.id });
@@ -87,9 +118,9 @@ export function createChallengeRoutes(auth, db) {
               interests: session.user.interests ?? [],
             };
           }
-        } catch {
-          /* anonymous recommendation = trending */
         }
+      } catch {
+        /* anonymous: trending-flavored recommendation */
       }
 
       const scored = docs.map((d) => ({ doc: d, score: 0 }));
@@ -105,9 +136,14 @@ export function createChallengeRoutes(auth, db) {
       } // newest: already createdAt-desc from the query
 
       const start = (q.page - 1) * q.limit;
-      const items = scored
-        .slice(start, start + q.limit)
-        .map((s) => withRate(stripHidden(s.doc)))
+      const pageDocs = scored.slice(start, start + q.limit).map((s) => s.doc);
+      const solvedBy = await acceptedMap(
+        db,
+        userId,
+        pageDocs.map((d) => d._id)
+      );
+      const items = pageDocs
+        .map((doc) => withRate(stripHidden(doc), solvedBy.get(doc._id.toString())))
         // List payload stays light: detail route serves files + tests.
         .map(({ starterFiles, visibleTests, description, ...rest }) => ({
           ...rest,
@@ -129,7 +165,27 @@ export function createChallengeRoutes(auth, db) {
     try {
       const doc = await challenges().findOne({ slug, status: "published" });
       if (!doc) return res.status(404).json({ error: "Challenge not found." });
-      return res.json({ challenge: withRate(stripHidden(doc)) });
+      const userId = await sessionUserId(auth, req);
+      const solvedBy = await acceptedMap(db, userId, [doc._id]);
+      const solved = solvedBy.get(doc._id.toString()) ?? null;
+      const challenge = withRate(stripHidden(doc), solved);
+      // Solved → attach the accepted snapshot so clients can render it
+      // read-only. Never attached otherwise (no solution to show).
+      if (solved) {
+        const accepted = await db.collection("submissions").findOne(
+          { userId, challengeId: doc._id, status: "accepted" },
+          { sort: { completedAt: 1 } }
+        );
+        if (accepted) {
+          challenge.solution = {
+            submissionId: accepted._id.toString(),
+            files: accepted.files ?? [],
+            score: accepted.score ?? null,
+            solvedAt: accepted.completedAt ?? null,
+          };
+        }
+      }
+      return res.json({ challenge });
     } catch (err) {
       console.error("[challenges] detail failed:", err?.message ?? err);
       return res.status(500).json({ error: "Could not load challenge." });

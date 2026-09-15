@@ -567,18 +567,39 @@ const resubmit = await post(
   { files: [{ path: "cart.js", content: fixedCode }] },
   runCookie
 );
-const reAccepted = resubmit.json?.submissionId
-  ? await waitSubmission(resubmit.json.submissionId, runCookie)
-  : null;
 check(
-  "repeat solve pays 10 XP, solved stays 1",
-  reAccepted?.status === "accepted" && reAccepted?.xpAwarded === 10,
-  `got ${reAccepted?.status} xp=${reAccepted?.xpAwarded}`
+  "solved challenge locked (submit → 403)",
+  resubmit.status === 403 && /already solved/i.test(JSON.stringify(resubmit.json)),
+  `got ${resubmit.status}`
+);
+const rerun = await post(
+  "/challenges/off-by-one-cart-total/run",
+  { files: [{ path: "cart.js", content: fixedCode }] },
+  runCookie
+);
+check(
+  "solved challenge locked (run → 403)",
+  rerun.status === 403,
+  `got ${rerun.status}`
+);
+const solvedDetail = await get("/challenges/off-by-one-cart-total", runCookie);
+check(
+  "detail reports solved + accepted snapshot",
+  solvedDetail.json?.challenge?.solved === true &&
+    Array.isArray(solvedDetail.json?.challenge?.solution?.files) &&
+    solvedDetail.json.challenge.solution.files.length === 1,
+  `got solved=${solvedDetail.json?.challenge?.solved}`
+);
+const solvedList = await get("/challenges?q=off-by-one", runCookie);
+check(
+  "catalog reports solved",
+  solvedList.json?.items?.[0]?.solved === true,
+  `got solved=${solvedList.json?.items?.[0]?.solved}`
 );
 const afterRepeat = await get("/users/me", runCookie);
 check(
-  "solvedCount stable, xp accumulated",
-  afterRepeat.json?.stats?.solvedCount === 1 && afterRepeat.json?.stats?.xp === 60,
+  "locked: xp and solved unchanged",
+  afterRepeat.json?.stats?.solvedCount === 1 && afterRepeat.json?.stats?.xp === 50,
   `xp=${afterRepeat.json?.stats?.xp} solved=${afterRepeat.json?.stats?.solvedCount}`
 );
 
@@ -598,7 +619,7 @@ check(
 const history = await get("/users/me/submissions", runCookie);
 check(
   "submission history lists own submits",
-  history.status === 200 && history.json?.total >= 3,
+  history.status === 200 && history.json?.total >= 2,
   `got ${history.status} total=${history.json?.total}`
 );
 

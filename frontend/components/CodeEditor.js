@@ -89,7 +89,7 @@ const OPTIONS = {
 };
 
 export const CodeEditor = forwardRef(function CodeEditor(
-  { files, activePath, initialContents, onContent, onRequestSave, onToggleTerminal },
+  { files, activePath, initialContents, onContent, onRequestSave, onToggleTerminal, readOnly },
   ref
 ) {
   const editorRef = useRef(null);
@@ -165,7 +165,7 @@ export const CodeEditor = forwardRef(function CodeEditor(
       theme="Nox-dark"
       beforeMount={defineNoxTheme}
       onMount={handleMount}
-      options={OPTIONS}
+      options={readOnly ? { ...OPTIONS, readOnly: true } : OPTIONS}
       loading={
         <div className="flex h-full items-center justify-center" role="status">
           <p className="text-[14px] text-ink-muted">Loading editor…</p>

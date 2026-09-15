@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { auth, LANGUAGES, INTERESTS } from "../../../lib/auth";
 import { swrGet } from "../../../lib/workspace";
 import { DifficultyBadge, KIND_LABEL, formatSuccess } from "../../../components/ChallengeBits";
@@ -330,7 +330,14 @@ function ChallengesInner() {
                   style={{ border: "1px solid transparent" }}
                 >
                   <div className="flex flex-wrap items-center gap-2">
-                    <DifficultyBadge level={c.difficulty} />
+                    {c.solved ? (
+                      <span className="inline-flex items-center gap-1 rounded-pill bg-success/15 px-2.5 py-1 text-[12px] font-medium tracking-[-0.12px] text-success">
+                        <Check size={12} strokeWidth={3} aria-hidden="true" />
+                        Completed
+                      </span>
+                    ) : (
+                      <DifficultyBadge level={c.difficulty} />
+                    )}
                     <span className="Nox-mono rounded-pill bg-canvas px-2.5 py-1 text-[12px] text-ink-muted">
                       {c.language}
                     </span>

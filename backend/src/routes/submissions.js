@@ -4,7 +4,7 @@ import { validate } from "../middleware/validate.js";
 import { authRateLimit } from "../middleware/rateLimit.js";
 import { toWebHeaders } from "./auth.js";
 import { runRequestSchema, EXECUTABLE_LANGUAGES } from "../validation.js";
-import { mergeChallengeFiles, findPublishedChallenge } from "../lib/challengeFiles.js";
+import { mergeChallengeFiles, findPublishedChallenge, findAcceptedSubmission } from "../lib/challengeFiles.js";
 import { createRun } from "../../workers/queue.js";
 
 /**
@@ -75,6 +75,10 @@ export function createSubmissionRoutes(auth, db) {
         if (!challenge.entryFile || !challenge.entryFunction) {
           console.error(`[submit] challenge ${challenge.slug} missing entry point`);
           return res.status(500).json({ error: "Challenge is misconfigured." });
+        }
+        // Solved challenges are locked: view-only, no re-submits.
+        if (await findAcceptedSubmission(db, me.id, challenge._id)) {
+          return res.status(403).json({ error: "Challenge already solved." });
         }
 
         const merged = mergeChallengeFiles(challenge, req.body.files);
