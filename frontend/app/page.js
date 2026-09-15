@@ -10,7 +10,7 @@ import { useSession } from "../lib/useSession";
 import { SessionNav } from "../components/SessionNav";
 
 const NAV_LINKS = [
-  { label: "Building...", href: "/challenges" },
+  { label: "Challenges", href: "/challenges" },
 ];
 
 /* Motion tokens — all hovers/presses ride the shared transitions-dev scale */

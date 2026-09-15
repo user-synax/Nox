@@ -136,3 +136,63 @@ export const profileUpdateSchema = z.object({
 /** Avatar upload guards (multer enforces size; route enforces mime). */
 export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 export const AVATAR_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+/* ── Challenges (PRD §7) ─────────────────────────────────────────── */
+
+export const DIFFICULTIES = ["easy", "medium", "hard", "expert"];
+export const CHALLENGE_KINDS = ["bug-fix", "logic-error", "runtime-error", "api-bug"];
+export const CHALLENGE_STATUSES = ["draft", "published"];
+export const CHALLENGE_SORTS = ["recommended", "newest", "trending", "popular"];
+
+const slugSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3)
+  .max(80)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug must be kebab-case.");
+
+const starterFileSchema = z.object({
+  path: z.string().trim().min(1).max(120),
+  content: z.string().min(1).max(100_000),
+});
+
+const testCaseSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  description: z.string().trim().max(300).optional(),
+  input: z.unknown(),
+  expected: z.unknown(),
+});
+
+/** Admin write payload — full challenge create/update (PRD §7.1 + §22). */
+export const challengeWriteSchema = z.object({
+  title: z.string().trim().min(3).max(100),
+  slug: slugSchema.optional(),
+  description: z.string().trim().min(10).max(20_000),
+  kind: z.enum(CHALLENGE_KINDS).default("bug-fix"),
+  language: z.enum(LANGUAGES),
+  difficulty: z.enum(DIFFICULTIES),
+  category: z.enum(INTERESTS),
+  tags: z.array(z.string().trim().min(1).max(30).toLowerCase()).max(10).default([]),
+  starterFiles: z.array(starterFileSchema).min(1).max(20),
+  visibleTests: z.array(testCaseSchema).min(1).max(50),
+  hiddenTests: z.array(testCaseSchema).max(100).default([]),
+  constraints: z.string().trim().max(2000).default(""),
+  hints: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
+  timeLimitMs: z.number().int().min(100).max(30_000).default(2000),
+  memoryLimitMb: z.number().int().min(8).max(1024).default(64),
+  estimatedSolveMinutes: z.number().int().min(1).max(180).default(15),
+  status: z.enum(CHALLENGE_STATUSES).default("draft"),
+});
+
+/** GET /challenges query — all optional, validated after coercion. */
+export const challengeListQuerySchema = z.object({
+  q: z.string().trim().max(100).optional(),
+  difficulty: z.enum(DIFFICULTIES).optional(),
+  language: z.enum(LANGUAGES).optional(),
+  category: z.enum(INTERESTS).optional(),
+  tag: z.string().trim().min(1).max(30).toLowerCase().optional(),
+  sort: z.enum(CHALLENGE_SORTS).default("recommended"),
+  page: z.coerce.number().int().min(1).max(1000).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});

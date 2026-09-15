@@ -8,6 +8,8 @@ import { connectDB } from "./db.js";
 import { createAuth } from "./auth.js";
 import { createAuthRoutes } from "./routes/auth.js";
 import { createUserRoutes } from "./routes/users.js";
+import { createChallengeRoutes } from "./routes/challenges.js";
+import { createAdminRoutes } from "./routes/admin.js";
 
 // Connect first: auth + indexes depend on the database.
 // A missing/unreachable MongoDB fails fast here with a clear message.
@@ -68,6 +70,12 @@ app.use("/api", createAuthRoutes(auth, db));
 // PRD §29 Users surface (public profiles + self edits + avatar uploads).
 app.use(createUserRoutes(auth, db));
 app.use("/api", createUserRoutes(auth, db));
+
+// Challenge catalog (public) + challenge admin (ADMIN+, PRD §22).
+app.use(createChallengeRoutes(auth, db));
+app.use("/api", createChallengeRoutes(auth, db));
+app.use(createAdminRoutes(auth, db));
+app.use("/api", createAdminRoutes(auth, db));
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });

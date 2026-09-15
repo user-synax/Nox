@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
 
 const SESSION_COOKIE_PREFIX = "Nox.";
 const AUTH_PAGES = new Set(["/", "/login", "/signup"]);
-const PROTECTED_PREFIXES = ["/dashboard", "/onboarding", "/settings"];
+const PROTECTED_PREFIXES = ["/dashboard", "/onboarding", "/settings", "/challenges"];
 
 function hasSession(req) {
   return req.cookies
@@ -47,6 +47,8 @@ export const config = {
     "/signup",
     "/dashboard",
     "/dashboard/:path*",
+    "/challenges",
+    "/challenges/:path*",
     "/onboarding",
     "/onboarding/:path*",
     "/settings",

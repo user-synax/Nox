@@ -1,11 +1,9 @@
 /**
- * Auth smoke test — full loop against a running API (default :4000).
+ * Nox API smoke test — full loop against a running API (default :4000).
  * Usage: bun scripts/smoke.js [baseUrl]
  *
- * Covers the PRD §29 surface with verification DISABLED (direct signup):
- * health, Zod 422s, domain allowlist, register + instant session,
- * duplicate username/email, profileStats seed, wrong-password rejection,
- * login + /auth/me, forgot/reset password, logout.
+ * Covers auth (verification DISABLED, direct signup), profile surface,
+ * and the challenge catalog + admin API (PRD §7 / §20 / §22 / §29).
  */
 import { MongoClient } from "mongodb";
 
@@ -249,6 +247,132 @@ if (resetToken) {
 
 const logout = await post("/auth/logout", undefined, login.cookie);
 check("logout succeeds", logout.status === 200, `got ${logout.status}`);
+
+// ── Challenge catalog (PRD §7 / §20) ──
+const catalog = await get("/challenges");
+check(
+  "catalog lists published (no hidden data)",
+  catalog.status === 200 &&
+    catalog.json?.total >= 5 &&
+    catalog.json?.items?.every(
+      (c) => c.hiddenTests === undefined && c.starterFiles === undefined && typeof c.excerpt === "string"
+    ),
+  `got ${catalog.status} total=${catalog.json?.total}`
+);
+
+const easy = await get("/challenges?difficulty=easy");
+check("filter by difficulty", easy.status === 200 && easy.json?.total === 2, `got ${easy.status} total=${easy.json?.total}`);
+
+const backend = await get("/challenges?category=backend");
+check("filter by category", backend.status === 200 && backend.json?.total === 2, `got ${backend.status} total=${backend.json?.total}`);
+
+const search = await get("/challenges?q=binary");
+check(
+  "keyword search",
+  search.status === 200 && search.json?.total === 1 && search.json?.items?.[0]?.slug === "blind-spot-binary-search",
+  `got ${search.status} total=${search.json?.total}`
+);
+
+const py = await get("/challenges?language=Python");
+check("empty filter set", py.status === 200 && py.json?.total === 0 && Array.isArray(py.json?.items), `got ${py.status}`);
+
+const sorted = await get("/challenges?sort=newest");
+check("sort newest", sorted.status === 200 && sorted.json?.items?.length > 0, `got ${sorted.status}`);
+
+const detail = await get("/challenges/off-by-one-cart-total");
+check(
+  "detail serves files + visible tests, strips hidden",
+  detail.status === 200 &&
+    detail.json?.challenge?.starterFiles?.length === 1 &&
+    detail.json?.challenge?.visibleTests?.length === 2 &&
+    detail.json?.challenge?.hiddenTests === undefined,
+  `got ${detail.status}`
+);
+
+const ghost = await get("/challenges/does-not-exist");
+check("unknown slug → 404", ghost.status === 404, `got ${ghost.status}`);
+
+// ── Challenge admin (PRD §22, RBAC) ──
+const ADMIN_EMAIL = `admin_${TAG}@gmail.com`;
+const adminCreated = await post("/auth/register", {
+  email: ADMIN_EMAIL,
+  password: PASS,
+  username: `a_${TAG}`.slice(0, 20),
+});
+const adminCookie = adminCreated.cookie;
+const anonAdmin = await get("/admin/challenges");
+check("admin list without session → 401", anonAdmin.status === 401, `got ${anonAdmin.status}`);
+// NOTE: login.cookie is stale here (password rotated + logged out above),
+// so re-login as the plain USER for the 403 check.
+const userReLogin = await post("/auth/login", { email: EMAIL, password: NEW_PASS });
+const userAdmin = await get("/admin/challenges", userReLogin.cookie);
+check("admin list as USER → 403", userAdmin.status === 403, `got ${userAdmin.status}`);
+
+// Promote directly (what scripts/make-admin.js does).
+await pdb.collection("user").updateOne(
+  { email: ADMIN_EMAIL.toLowerCase() },
+  { $set: { roles: ["ADMIN"], updatedAt: new Date() } }
+);
+const reLogin = await post("/auth/login", { email: ADMIN_EMAIL, password: PASS });
+const GodCookie = reLogin.cookie;
+
+const adminList = await get("/admin/challenges", GodCookie);
+check(
+  "admin list includes hidden tests",
+  adminList.status === 200 &&
+    adminList.json?.items?.length >= 5 &&
+    adminList.json?.items?.every((c) => Array.isArray(c.hiddenTests)),
+  `got ${adminList.status}`
+);
+
+const badChallenge = await post("/admin/challenges", { title: "x" }, GodCookie);
+check("admin create validates (422)", badChallenge.status === 422, `got ${badChallenge.status}`);
+
+const draft = await post(
+  "/admin/challenges",
+  {
+    title: "Smoke Draft",
+    description: "A draft that the public must never see until published.",
+    language: "javascript",
+    difficulty: "easy",
+    category: "general",
+    starterFiles: [{ path: "a.js", content: "export const a = 1;\n" }],
+    visibleTests: [{ name: "works", input: [[]], expected: [] }],
+  },
+  GodCookie
+);
+check("admin create draft (201)", draft.status === 201 && draft.json?.challenge?.status === "draft", `got ${draft.status}`);
+const draftId = draft.json?.challenge?.id;
+const draftSlug = draft.json?.challenge?.slug;
+
+const beforePublish = await get(`/challenges/${draftSlug}`);
+check("draft hidden from public", beforePublish.status === 404, `got ${beforePublish.status}`);
+
+const patched = await fetch(`${BASE}/admin/challenges/${draftId}`, {
+  method: "PATCH",
+  headers: { "Content-Type": "application/json", Cookie: GodCookie ?? "" },
+  body: JSON.stringify({ description: "Updated description for version bump." }),
+}).then((r) => r.json().then((json) => ({ status: r.status, json })));
+check(
+  "admin PATCH bumps version on content edit",
+  patched.status === 200 && patched.json?.challenge?.version === 2,
+  `got ${patched.status}`
+);
+
+const published = await post(`/admin/challenges/${draftId}/publish`, undefined, GodCookie);
+check("admin publish", published.status === 200 && published.json?.challenge?.status === "published", `got ${published.status}`);
+
+const afterPublish = await get(`/challenges/${draftSlug}`);
+check("published draft goes public", afterPublish.status === 200, `got ${afterPublish.status}`);
+
+const unpublished = await post(`/admin/challenges/${draftId}/unpublish`, undefined, GodCookie);
+check("admin unpublish", unpublished.status === 200, `got ${unpublished.status}`);
+
+const deleted = await fetch(`${BASE}/admin/challenges/${draftId}`, {
+  method: "DELETE",
+  headers: { Cookie: GodCookie ?? "" },
+}).then((r) => r.status);
+check("admin delete", deleted === 200, `got ${deleted}`);
 
 await mongo.close();
 console.log(failures === 0 ? "\nSMOKE PASS" : `\nSMOKE FAIL (${failures})`);

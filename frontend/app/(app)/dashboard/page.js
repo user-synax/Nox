@@ -56,7 +56,7 @@ export default function DashboardPage() {
       label: "Pick your focus",
       href: "/settings",
     },
-    { done: (stats?.solvedCount ?? 0) > 0, label: "Solve your first challenge", soon: true },
+    { done: (stats?.solvedCount ?? 0) > 0, label: "Solve your first challenge", href: "/challenges" },
   ];
   const doneCount = checklist.filter((c) => c.done).length;
 

@@ -145,6 +145,17 @@ export const auth = {
   /** Public profile — no session needed. */
   publicProfile: (username) =>
     request(`/users/${encodeURIComponent(username)}`),
+  /** Challenge catalog — filters: q, difficulty, language, category, tag, sort, page, limit. */
+  listChallenges: (params = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    }
+    const suffix = qs.toString();
+    return request(`/challenges${suffix ? `?${suffix}` : ""}`);
+  },
+  /** Challenge detail — starter files + visible tests (hidden stripped server-side). */
+  getChallenge: (slug) => request(`/challenges/${encodeURIComponent(slug)}`),
 };
 
 /** MVP languages (PRD §8) with display labels. */

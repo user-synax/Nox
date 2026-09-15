@@ -99,11 +99,14 @@ export function Sidebar({ user, pathname }) {
               <LayoutDashboard size={17} strokeWidth={2} aria-hidden="true" />
               Dashboard
             </Link>
-            <span aria-disabled="true" className={`${itemCls(false)} cursor-not-allowed opacity-70`}>
+            <Link
+              href="/challenges"
+              aria-current={pathname.startsWith("/challenges") ? "page" : undefined}
+              className={itemCls(pathname.startsWith("/challenges"))}
+            >
               <Compass size={17} strokeWidth={2} aria-hidden="true" />
               Challenges
-              <SoonBadge />
-            </span>
+            </Link>
             <span aria-disabled="true" className={`${itemCls(false)} cursor-not-allowed opacity-70`}>
               <Trophy size={17} strokeWidth={2} aria-hidden="true" />
               Leaderboard
@@ -189,6 +192,7 @@ export function TabBar({ user, pathname }) {
   const profileHref = user?.username ? `/u/${user.username}` : "/settings";
   const tabs = [
     { href: "/dashboard", label: "Home", Icon: LayoutDashboard, active: pathname === "/dashboard" },
+    { href: "/challenges", label: "Challenges", Icon: Compass, active: pathname.startsWith("/challenges") },
     { href: profileHref, label: "Profile", Icon: User, active: pathname === profileHref },
     { href: "/settings", label: "Settings", Icon: Settings, active: pathname === "/settings" },
   ];
@@ -198,7 +202,7 @@ export function TabBar({ user, pathname }) {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-hairline-soft bg-canvas/95 backdrop-blur lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div className="grid grid-cols-3 px-2 pt-1">
+      <div className="grid grid-cols-4 px-2 pt-1">
         {tabs.map(({ href, label, Icon, active }) => (
           <Link
             key={href + label}

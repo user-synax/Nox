@@ -37,6 +37,23 @@ export async function connectDB(uri) {
     .collection("devOutbox")
     .createIndex({ email: 1, kind: 1 }, { name: "devOutbox_email_kind" });
 
+  // Challenges (PRD §7): unique slug + catalog filter/sort paths.
+  await db
+    .collection("challenges")
+    .createIndex({ slug: 1 }, { unique: true, name: "challenges_slug_unique" });
+  await db
+    .collection("challenges")
+    .createIndex({ status: 1, createdAt: -1 }, { name: "challenges_status_created" });
+  await db
+    .collection("challenges")
+    .createIndex(
+      { status: 1, difficulty: 1, language: 1, category: 1 },
+      { name: "challenges_status_filters" }
+    );
+  await db
+    .collection("challenges")
+    .createIndex({ status: 1, solveCount: -1 }, { name: "challenges_status_popular" });
+
   // Better Auth session + verification collections: TTL on expiry so
   // stale rows disappear even if a worker never cleans them.
   // (Collections are created lazily — createIndex creates them.)
