@@ -89,15 +89,15 @@ const OPTIONS = {
 };
 
 export const CodeEditor = forwardRef(function CodeEditor(
-  { files, activePath, initialContents, onContent, onRequestSave },
+  { files, activePath, initialContents, onContent, onRequestSave, onToggleTerminal },
   ref
 ) {
   const editorRef = useRef(null);
   const modelsRef = useRef(new Map());
   const viewStatesRef = useRef(new Map());
   const activeRef = useRef(activePath);
-  const liveRef = useRef({ files, initialContents, onContent, onRequestSave });
-  liveRef.current = { files, initialContents, onContent, onRequestSave };
+  const liveRef = useRef({ files, initialContents, onContent, onRequestSave, onToggleTerminal });
+  liveRef.current = { files, initialContents, onContent, onRequestSave, onToggleTerminal };
 
   // Tab switch: park view state, swap model, restore.
   useEffect(() => {
@@ -154,6 +154,9 @@ export const CodeEditor = forwardRef(function CodeEditor(
     });
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       liveRef.current.onRequestSave?.();
+    });
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Backquote, () => {
+      liveRef.current.onToggleTerminal?.();
     });
   };
 

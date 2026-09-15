@@ -52,6 +52,29 @@ function sanitizeStats(doc) {
   return rest;
 }
 
+/** Last accepted solves (public-safe: names + deltas, no code). */
+async function recentSolves(db, userId, limit = 5) {
+  try {
+    const rows = await db
+      .collection("ratingEvents")
+      .find({ userId: new ObjectId(String(userId)), accepted: true })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .toArray();
+    return rows.map((r) => ({
+      challengeSlug: r.challengeSlug,
+      challengeTitle: r.challengeTitle,
+      difficulty: r.difficulty ?? null,
+      score: r.score ?? null,
+      xpAwarded: r.xpAwarded ?? 0,
+      ratingDelta: r.ratingDelta ?? 0,
+      solvedAt: r.createdAt,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 function normalizeUrl(value) {
   if (value === undefined) return undefined;
   const trimmed = value.trim();
@@ -123,12 +146,13 @@ export function createUserRoutes(auth, db) {
   router.get("/users/me", async (req, res) => {
     const userId = await requireUserId(req, res);
     if (!userId) return;
-    const [userDoc, statsDoc] = await Promise.all([
+    const [userDoc, statsDoc, solves] = await Promise.all([
       db.collection("user").findOne({ _id: userId }),
       db.collection("profileStats").findOne({ userId: userId.toString() }),
+      recentSolves(db, userId),
     ]);
     if (!userDoc) return res.status(404).json({ error: "User not found." });
-    return res.json({ user: sanitizeUser(userDoc), stats: sanitizeStats(statsDoc) });
+    return res.json({ user: sanitizeUser(userDoc), stats: sanitizeStats(statsDoc), recentSolves: solves });
   });
 
   router.patch("/users/me", strictAuthLimit(), validate(profileUpdateSchema), async (req, res) => {
@@ -225,12 +249,14 @@ export function createUserRoutes(auth, db) {
     if (!username) return res.status(404).json({ error: "User not found." });
     const userDoc = await db.collection("user").findOne({ username });
     if (!userDoc) return res.status(404).json({ error: "User not found." });
-    const statsDoc = await db
-      .collection("profileStats")
-      .findOne({ userId: userDoc._id.toString() });
+    const [statsDoc, solves] = await Promise.all([
+      db.collection("profileStats").findOne({ userId: userDoc._id.toString() }),
+      recentSolves(db, userDoc._id),
+    ]);
     return res.json({
       user: sanitizePublicUser(userDoc),
       stats: sanitizeStats(statsDoc),
+      recentSolves: solves,
     });
   });
 

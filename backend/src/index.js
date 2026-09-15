@@ -11,6 +11,8 @@ import { createUserRoutes } from "./routes/users.js";
 import { createChallengeRoutes } from "./routes/challenges.js";
 import { createAdminRoutes } from "./routes/admin.js";
 import { createRunRoutes } from "./routes/runs.js";
+import { createSubmissionRoutes } from "./routes/submissions.js";
+import { createLeaderboardRoutes } from "./routes/leaderboard.js";
 
 // Connect first: auth + indexes depend on the database.
 // A missing/unreachable MongoDB fails fast here with a clear message.
@@ -82,8 +84,31 @@ app.use("/api", createAdminRoutes(auth, db));
 app.use(createRunRoutes(auth, db));
 app.use("/api", createRunRoutes(auth, db));
 
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, time: new Date().toISOString() });
+// Submissions (hidden judging) + leaderboards (PRD §12/§16).
+app.use(createSubmissionRoutes(auth, db));
+app.use("/api", createSubmissionRoutes(auth, db));
+app.use(createLeaderboardRoutes(auth, db));
+app.use("/api", createLeaderboardRoutes(auth, db));
+
+app.get("/api/health", async (_req, res) => {
+  // Execution liveness rides along: counts only, nothing sensitive.
+  // Lets the workspace distinguish "no worker online" from "queue busy".
+  let queue = { queued: 0, running: 0 };
+  let workersOnline = 0;
+  try {
+    const [queued, running, workers] = await Promise.all([
+      db.collection("runs").countDocuments({ status: "queued" }),
+      db.collection("runs").countDocuments({ status: "running" }),
+      db
+        .collection("workerHeartbeats")
+        .countDocuments({ lastBeat: { $gte: new Date(Date.now() - 30_000) } }),
+    ]);
+    queue = { queued, running };
+    workersOnline = workers;
+  } catch {
+    /* health stays up even if stats fail */
+  }
+  res.json({ ok: true, time: new Date().toISOString(), queue, workersOnline });
 });
 
 app.use((req, res) => {

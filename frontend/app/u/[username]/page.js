@@ -3,7 +3,7 @@
 import { use, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowUpRight, CalendarDays, GitBranch, Globe } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Check, GitBranch, Globe } from "lucide-react";
 import { auth } from "../../../lib/auth";
 import { Avatar } from "../../../components/Avatar";
 import { StatNumber } from "../../../components/Stat";
@@ -326,11 +326,55 @@ export default function PublicProfilePage({ params }) {
                     </p>
                   </section>
                 ) : (
-                  <section className="rounded-xl bg-surface-1 p-8 text-center">
-                    <p className="text-[15px] font-medium text-ink">Quiet… for now</p>
-                    <p className="mx-auto mt-2 max-w-[42ch] text-[14px] leading-[1.45] text-ink-muted">
-                      Recent solves and streak activity will appear here once challenges go live.
-                    </p>
+                  <section className="rounded-xl bg-surface-1 p-5" aria-label="Recent activity">
+                    {(data.recentSolves?.length ?? 0) === 0 ? (
+                      <div className="p-3 text-center">
+                        <p className="text-[15px] font-medium text-ink">Quiet… for now</p>
+                        <p className="mx-auto mt-2 max-w-[42ch] text-[14px] leading-[1.45] text-ink-muted">
+                          {isOwn
+                            ? "Accept your first challenge and it will show up here."
+                            : "Their accepted solves will appear here."}
+                        </p>
+                      </div>
+                    ) : (
+                      <ul className="flex flex-col">
+                        {data.recentSolves.map((s, i) => (
+                          <li key={`${s.challengeSlug}-${i}`}>
+                            <Link
+                              href={`/challenges/${s.challengeSlug}`}
+                              className={`Nox-focus group flex items-center gap-3 rounded-md px-2 py-2.5 no-underline hover:bg-surface-2 ${HOVER}`}
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success"
+                              >
+                                <Check size={13} strokeWidth={3} />
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[14px] font-medium text-ink">
+                                  {s.challengeTitle ?? s.challengeSlug}
+                                </span>
+                                <span className="Nox-mono block text-[12px] text-ink-muted">
+                                  {s.solvedAt
+                                    ? new Date(s.solvedAt).toLocaleDateString(undefined, {
+                                        month: "short",
+                                        day: "numeric",
+                                      })
+                                    : ""}
+                                  {s.solvedAt ? " · " : ""}+{s.xpAwarded ?? 0} XP · +
+                                  {s.ratingDelta ?? 0}
+                                </span>
+                              </span>
+                              {s.score != null ? (
+                                <span className="Nox-mono shrink-0 text-[13px] text-ink-muted">
+                                  {s.score}
+                                </span>
+                              ) : null}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </section>
                 )}
               </div>

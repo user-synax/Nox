@@ -6,6 +6,7 @@
   "description": "Nox API — Express + Better Auth + MongoDB (auth for the Nox debugging platform)",
   "scripts": {
     "dev": "bun --watch src/index.js",
+    "dev:all": "bun scripts/dev-all.js",
     "start": "bun src/index.js",
     "worker": "bun workers/runner.js",
     "worker:dev": "bun --watch workers/runner.js",

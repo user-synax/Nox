@@ -152,7 +152,19 @@ export const auth = {
       body: { files },
     }),
   /** Poll a run — owner or admin only. */
-  getRun: (runId) => request(`/runs/${encodeURIComponent(runId)}`),  /** Challenge catalog — filters: q, difficulty, language, category, tag, sort, page, limit. */
+  getRun: (runId) => request(`/runs/${encodeURIComponent(runId)}`),
+  /** Submit for hidden judging → 202 { submissionId }. */
+  submitChallenge: (ref, files) =>
+    request(`/challenges/${encodeURIComponent(ref)}/submit`, {
+      method: "POST",
+      body: { files },
+    }),
+  /** Poll a submission verdict — owner or admin only. */
+  getSubmission: (id) => request(`/submissions/${encodeURIComponent(id)}`),
+  /** Own submission history, newest first. */
+  mySubmissions: (page = 1, limit = 20) =>
+    request(`/users/me/submissions?page=${page}&limit=${limit}`),
+  /** Challenge catalog — filters: q, difficulty, language, category, tag, sort, page, limit. */
   listChallenges: (params = {}) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {
@@ -164,6 +176,21 @@ export const auth = {
   /** Challenge detail — starter files + visible tests (hidden stripped server-side). */
   getChallenge: (slug) => request(`/challenges/${encodeURIComponent(slug)}`),
 };
+
+/** Rank ladder mirror — source of truth is backend workers/scoring.js. */
+const RANK_STEPS = [
+  [2200, "Grandmaster"],
+  [2000, "Master"],
+  [1800, "Diamond"],
+  [1600, "Platinum"],
+  [1400, "Gold"],
+  [1200, "Silver"],
+  [-Infinity, "Bronze"],
+];
+
+export function rankFor(rating) {
+  return RANK_STEPS.find(([min]) => (rating ?? 1000) >= min)?.[1] ?? "Bronze";
+}
 
 /** MVP languages (PRD §8) with display labels. */
 export const LANGUAGES = [

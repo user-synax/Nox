@@ -15,6 +15,7 @@ export function defaultProfileStats(userId) {
     solvedCount: 0,
     acceptedCount: 0,
     attemptCount: 0,
+    submissionCount: 0,
     successRate: 0,
     hardestSolvedChallengeId: null,
     preferredLanguages: [],

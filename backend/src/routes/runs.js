@@ -4,6 +4,7 @@ import { validate } from "../middleware/validate.js";
 import { strictAuthLimit } from "../middleware/rateLimit.js";
 import { toWebHeaders } from "./auth.js";
 import { runRequestSchema, EXECUTABLE_LANGUAGES } from "../validation.js";
+import { mergeChallengeFiles } from "../lib/challengeFiles.js";
 import { createRun, getRun, sanitizeRun } from "../../workers/queue.js";
 
 /**
@@ -17,8 +18,6 @@ import { createRun, getRun, sanitizeRun } from "../../workers/queue.js";
  * Missing files are backfilled from starters; unknown paths are rejected.
  * Hidden tests are never attached to runs (submit milestone owns those).
  */
-
-const MAX_TOTAL_BYTES = 500 * 1024;
 
 async function requireUserId(auth, req, res) {
   try {
@@ -72,31 +71,18 @@ export function createRunRoutes(auth, db) {
           return res.status(500).json({ error: "Challenge is misconfigured." });
         }
 
-        const starters = new Map(
-          (challenge.starterFiles ?? []).map((f) => [f.path, f.content ?? ""])
-        );
-        if (!starters.has(challenge.entryFile)) {
+        const starterPaths = new Set((challenge.starterFiles ?? []).map((f) => f.path));
+        if (!starterPaths.has(challenge.entryFile)) {
           console.error(`[runs] challenge ${challenge.slug} entry not in starters`);
           return res.status(500).json({ error: "Challenge is misconfigured." });
         }
-        for (const f of req.body.files) {
-          if (!starters.has(f.path)) {
-            return res.status(422).json({ error: `Unknown file: ${f.path}.` });
-          }
-        }
-        const merged = [...starters.entries()].map(([path, starter]) => {
-          const override = req.body.files.find((f) => f.path === path);
-          return { path, content: override ? override.content : starter };
-        });
-        const totalBytes = merged.reduce(
-          (n, f) => n + Buffer.byteLength(f.content ?? "", "utf8"),
-          0
-        );
-        if (totalBytes > MAX_TOTAL_BYTES) {
-          return res.status(422).json({ error: "Submission is too large." });
+        const merged = mergeChallengeFiles(challenge, req.body.files);
+        if (merged.error) {
+          return res.status(422).json({ error: merged.error });
         }
 
         const runId = await createRun(db, {
+          kind: "run",
           userId: me.id,
           challengeId: challenge._id,
           challengeSlug: challenge.slug,
@@ -106,7 +92,7 @@ export function createRunRoutes(auth, db) {
           entryFunction: challenge.entryFunction,
           testContext: challenge.testContext ?? {},
           tests: challenge.visibleTests ?? [],
-          files: merged,
+          files: merged.merged,
           timeLimitMs: challenge.timeLimitMs ?? 2000,
         });
         return res.status(202).json({ runId, status: "queued" });

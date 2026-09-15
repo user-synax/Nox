@@ -62,6 +62,28 @@ export async function connectDB(uri) {
     .collection("runs")
     .createIndex({ userId: 1, createdAt: -1 }, { name: "runs_user_created" });
 
+  // Submissions (immutable judging records) + rating events (feed).
+  await db
+    .collection("submissions")
+    .createIndex({ userId: 1, challengeId: 1, createdAt: -1 }, { name: "submissions_user_challenge" });
+  await db
+    .collection("submissions")
+    .createIndex({ userId: 1, createdAt: -1 }, { name: "submissions_user_created" });
+  await db
+    .collection("ratingEvents")
+    .createIndex({ createdAt: -1 }, { name: "ratingEvents_created" });
+  await db
+    .collection("ratingEvents")
+    .createIndex({ userId: 1, createdAt: -1 }, { name: "ratingEvents_user_created" });
+
+  // Worker heartbeats (liveness for the execution queue status).
+  await db
+    .collection("workerHeartbeats")
+    .createIndex({ workerId: 1 }, { unique: true, name: "workerHeartbeats_id_unique" });
+  await db
+    .collection("workerHeartbeats")
+    .createIndex({ lastBeat: -1 }, { name: "workerHeartbeats_beat" });
+
   // Better Auth session + verification collections: TTL on expiry so
   // stale rows disappear even if a worker never cleans them.
   // (Collections are created lazily — createIndex creates them.)

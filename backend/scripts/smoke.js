@@ -493,6 +493,120 @@ const plainLogin = await post("/auth/login", { email: plainEmail, password: PASS
 const snooped = await get(`/runs/${fixedRun.json?.runId}`, plainLogin.cookie);
 check("non-owner cannot read run (404)", snooped.status === 404, `got ${snooped.status}`);
 
+// ── Hidden judging + submissions (PRD §11–§14) ──
+async function waitSubmission(id, cookie, timeoutMs = 30000) {
+  const start = Date.now();
+  for (;;) {
+    const r = await get(`/submissions/${id}`, cookie);
+    const st = r.json?.submission?.status;
+    if (st && st !== "pending") return r.json.submission;
+    if (Date.now() - start > timeoutMs) return { status: "POLL-TIMEOUT" };
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+const anonSubmit = await post("/challenges/off-by-one-cart-total/submit", {
+  files: [{ path: "cart.js", content: fixedCode }],
+});
+check("submit without session → 401", anonSubmit.status === 401, `got ${anonSubmit.status}`);
+
+const submitBroken = await post(
+  "/challenges/off-by-one-cart-total/submit",
+  { files: [{ path: "cart.js", content: cartStarter }] },
+  runCookie
+);
+check("submit enqueues (202)", submitBroken.status === 202 && !!submitBroken.json?.submissionId, `got ${submitBroken.status}`);
+const rejected = submitBroken.json?.submissionId
+  ? await waitSubmission(submitBroken.json.submissionId, runCookie)
+  : null;
+check(
+  "broken code rejected, score 0, -2 rating",
+  rejected?.status === "rejected" && rejected?.score === 0 && rejected?.ratingDelta === -2,
+  `got ${rejected?.status} score=${rejected?.score} delta=${rejected?.ratingDelta}`
+);
+
+const submitFixed = await post(
+  "/challenges/off-by-one-cart-total/submit",
+  { files: [{ path: "cart.js", content: fixedCode }] },
+  runCookie
+);
+const accepted = submitFixed.json?.submissionId
+  ? await waitSubmission(submitFixed.json.submissionId, runCookie)
+  : null;
+const breakdown = accepted?.scoreBreakdown;
+check(
+  "fixed code accepted with PRD breakdown + first-solve XP",
+  accepted?.status === "accepted" &&
+    accepted?.score >= 90 &&
+    accepted?.score === breakdown?.correctness + breakdown?.efficiency + breakdown?.speed + breakdown?.quality &&
+    accepted?.xpAwarded === 50 &&
+    accepted?.ratingDelta > 0,
+  `got ${accepted?.status} score=${accepted?.score} xp=${accepted?.xpAwarded} delta=${accepted?.ratingDelta}`
+);
+check(
+  "hidden results leak-proof (names only)",
+  Array.isArray(accepted?.results) &&
+    accepted.results.length === 3 &&
+    accepted.results.every((r) => r.input === undefined && r.expected === undefined && r.actual === undefined),
+  JSON.stringify(accepted?.results)?.slice(0, 160)
+);
+
+const afterStats = await get("/users/me", runCookie);
+check(
+  "stats settled (rating/xp/solved/streak)",
+  afterStats.json?.stats?.xp === 50 &&
+    afterStats.json?.stats?.solvedCount === 1 &&
+    afterStats.json?.stats?.currentStreak === 1 &&
+    afterStats.json?.stats?.successRate === 0.5 &&
+    afterStats.json?.user?.onboardingCompleted !== undefined,
+  JSON.stringify(afterStats.json?.stats)?.slice(0, 200)
+);
+
+const resubmit = await post(
+  "/challenges/off-by-one-cart-total/submit",
+  { files: [{ path: "cart.js", content: fixedCode }] },
+  runCookie
+);
+const reAccepted = resubmit.json?.submissionId
+  ? await waitSubmission(resubmit.json.submissionId, runCookie)
+  : null;
+check(
+  "repeat solve pays 10 XP, solved stays 1",
+  reAccepted?.status === "accepted" && reAccepted?.xpAwarded === 10,
+  `got ${reAccepted?.status} xp=${reAccepted?.xpAwarded}`
+);
+const afterRepeat = await get("/users/me", runCookie);
+check(
+  "solvedCount stable, xp accumulated",
+  afterRepeat.json?.stats?.solvedCount === 1 && afterRepeat.json?.stats?.xp === 60,
+  `xp=${afterRepeat.json?.stats?.xp} solved=${afterRepeat.json?.stats?.solvedCount}`
+);
+
+const global = await get("/leaderboard/global?limit=50");
+check(
+  "global leaderboard ranks by rating",
+  global.status === 200 && global.json?.entries?.some((e) => e.username === USER && e.rank === "Bronze"),
+  `got ${global.status}`
+);
+const weekly = await get("/leaderboard/weekly?limit=50");
+check(
+  "weekly leaderboard tracks progression",
+  weekly.status === 200 && weekly.json?.entries?.some((e) => e.username === USER && e.solves >= 1),
+  `got ${weekly.status}`
+);
+
+const history = await get("/users/me/submissions", runCookie);
+check(
+  "submission history lists own submits",
+  history.status === 200 && history.json?.total >= 3,
+  `got ${history.status} total=${history.json?.total}`
+);
+
+const subSnoop = await get(`/submissions/${submitFixed.json?.submissionId}`, plainLogin.cookie);
+check("non-owner cannot read submission (404)", subSnoop.status === 404, `got ${subSnoop.status}`);
+const subAdmin = await get(`/submissions/${submitFixed.json?.submissionId}`, GodCookie);
+check("admin can read submission", subAdmin.status === 200, `got ${subAdmin.status}`);
+
 await mongo.close();
 console.log(failures === 0 ? "\nSMOKE PASS" : `\nSMOKE FAIL (${failures})`);
 process.exit(failures === 0 ? 0 : 1);
