@@ -2,12 +2,15 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileCode2, FlaskConical, Lightbulb, Lock } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileCode2, FlaskConical, Lightbulb, Lock } from "lucide-react";
 import { auth, LANGUAGES, INTERESTS } from "../../../../lib/auth";
+import { recordRecent, swrGet } from "../../../../lib/workspace";
 import { DifficultyBadge, KIND_LABEL, formatSuccess } from "../../../../components/ChallengeBits";
 
 const HOVER =
   "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]";
+const PRESS =
+  "transition-transform duration-[var(--duration-quick)] ease-[var(--ease-smooth-out)] active:scale-[0.97]";
 
 const TABS = ["Description", "Starter code", "Visible tests"];
 
@@ -75,16 +78,20 @@ export default function ChallengeDetailPage({ params }) {
 
   useEffect(() => {
     let alive = true;
-    auth
-      .getChallenge(slug)
-      .then(({ challenge: c }) => {
-        if (alive) setChallenge(c);
-      })
-      .catch((err) => {
+    // IDB first: back-navigation from solve renders instantly.
+    swrGet(
+      `challenge:v1:${slug}`,
+      () => auth.getChallenge(slug).then((r) => r.challenge),
+      (c) => {
         if (!alive) return;
-        if (err.status === 404) setMissing(true);
-        else setError(err.message);
-      });
+        setChallenge(c);
+        recordRecent(c.slug, c.title);
+      }
+    ).catch((err) => {
+      if (!alive) return;
+      if (err?.status === 404) setMissing(true);
+      else setError(err?.message ?? "Could not load challenge.");
+    });
     return () => {
       alive = false;
     };
@@ -193,17 +200,17 @@ export default function ChallengeDetailPage({ params }) {
         </p>
       </div>
 
-      {/* CTA (execution engine lands next — honest disabled state) */}
+      {/* CTA */}
       <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
-        <span
-          aria-disabled="true"
-          className="inline-flex min-h-[44px] cursor-not-allowed items-center justify-center gap-2 rounded-pill bg-white px-6 py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black opacity-50"
+        <Link
+          href={`/challenges/${challenge.slug}/solve`}
+          className={`Nox-focus inline-flex min-h-[44px] items-center justify-center gap-2 rounded-pill bg-white px-6 py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black no-underline ${HOVER} ${PRESS}`}
         >
-          <Lock size={15} aria-hidden="true" />
           Start debugging
-        </span>
+          <ArrowRight size={15} aria-hidden="true" />
+        </Link>
         <p className="text-[13px] text-ink-muted">
-          The editor + test runner land with the execution engine.
+          Your code autosaves as a local draft while you work.
         </p>
       </div>
 

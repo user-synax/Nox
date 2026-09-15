@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronRight, Flame, Lock } from "lucide-react";
+import { Check, ChevronRight, Flame, History, Lock } from "lucide-react";
 import { useAppSession } from "../../../components/SessionScope";
 import { StatNumber } from "../../../components/Stat";
+import { getRecent } from "../../../lib/workspace";
 
 const HOVER =
   "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]";
@@ -34,12 +35,24 @@ function StatCard({ label, value, sub }) {
 export default function DashboardPage() {
   const { session } = useAppSession();
   const [mounted, setMounted] = useState(false);
+  const [recent, setRecent] = useState([]);
   const user = session?.user;
   const stats = session?.stats;
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(raf);
+  }, []);
+
+  // Instant local lookup — no API round-trip for recent views.
+  useEffect(() => {
+    let alive = true;
+    getRecent(4).then((rows) => {
+      if (alive) setRecent(rows);
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const streak = stats?.currentStreak ?? 0;
@@ -100,6 +113,32 @@ export default function DashboardPage() {
         <StatCard label="Solved" value={stats?.solvedCount ?? 0} />
         <StatCard label="Day streak" value={streak} />
       </div>
+
+      {/* Recently viewed — local IDB lookup, renders instantly */}
+      {recent.length > 0 ? (
+        <section aria-label="Recently viewed" className="mt-2 rounded-xl bg-surface-1 p-5">
+          <h2 className="flex items-center gap-2 text-[15px] font-medium tracking-[-0.15px] text-ink">
+            <History size={15} aria-hidden="true" className="text-ink-muted" />
+            Pick up where you left off
+          </h2>
+          <div className="mt-3 flex flex-col">
+            {recent.map((r) => (
+              <Link
+                key={r.slug}
+                href={`/challenges/${r.slug}`}
+                className={`Nox-focus group flex items-center gap-3 rounded-md px-1 py-2.5 text-[14px] font-medium text-ink no-underline hover:bg-surface-2 ${HOVER}`}
+              >
+                <span className="truncate">{r.title}</span>
+                <ChevronRight
+                  size={15}
+                  aria-hidden="true"
+                  className="ml-auto shrink-0 text-ink-muted transition-transform duration-[var(--duration-fast)] group-hover:translate-x-0.5 group-hover:text-ink"
+                />
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* Checklist + daily spotlight */}
       <div className="mt-2 grid gap-2 pt-2 lg:grid-cols-5">

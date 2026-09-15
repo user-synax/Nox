@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { auth, LANGUAGES, INTERESTS } from "../../../lib/auth";
+import { swrGet } from "../../../lib/workspace";
 import { DifficultyBadge, KIND_LABEL, formatSuccess } from "../../../components/ChallengeBits";
 
 const HOVER =
@@ -96,28 +97,25 @@ function ChallengesInner() {
 
   useEffect(() => {
     let alive = true;
-    auth
-      .listChallenges({
-        q: debouncedQ || undefined,
-        difficulty: difficulty || undefined,
-        language: language || undefined,
-        category: category || undefined,
-        sort: TABS[tab].sort,
-        page,
-        limit: 12,
-      })
-      .then((d) => {
-        if (alive) {
-          setData(d);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (alive) {
-          setError(err.message);
-          setLoading(false);
-        }
-      });
+    const params = {
+      q: debouncedQ || undefined,
+      difficulty: difficulty || undefined,
+      language: language || undefined,
+      category: category || undefined,
+      sort: TABS[tab].sort,
+      page,
+      limit: 12,
+    };
+    // IDB first: repeat visits render instantly, network refreshes underneath.
+    swrGet(`challenges:v1:${JSON.stringify(params)}`, () => auth.listChallenges(params), (d) => {
+      if (!alive) return;
+      setData(d);
+      setLoading(false);
+    }).catch((err) => {
+      if (!alive) return;
+      setError(err.message);
+      setLoading(false);
+    });
     return () => {
       alive = false;
     };
