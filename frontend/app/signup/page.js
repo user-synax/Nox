@@ -3,7 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
+import {
+  auth,
+  toFieldError,
+  emailDomainAllowed,
+  emailDomainMessage,
+} from "../../lib/auth";
 
 const HOVER =
   "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]";
@@ -86,8 +93,12 @@ const validateUsername = (v) =>
   USERNAME_RE.test(v.trim())
     ? null
     : "3–20 characters: letters, numbers, underscores.";
-const validateEmail = (v) =>
-  EMAIL_RE.test(v.trim()) ? null : "Enter a valid email address.";
+const validateEmail = (v) => {
+  const t = v.trim();
+  if (!EMAIL_RE.test(t)) return "Enter a valid email address.";
+  if (!emailDomainAllowed(t)) return emailDomainMessage();
+  return null;
+};
 const validatePassword = (v) =>
   v.length >= 8 ? null : "Use at least 8 characters.";
 
@@ -100,6 +111,8 @@ export default function SignupPage() {
   const username = useField(validateUsername);
   const email = useField(validateEmail);
   const password = useField(validatePassword);
+  const [formError, setFormError] = useState(null);
+  const router = useRouter();
   const usernameRef = useRef(null);
   const emailRef = useRef(null);
   const passwordRef = useRef(null);
@@ -112,9 +125,10 @@ export default function SignupPage() {
 
   useEffect(() => () => clearTimeout(busyTimer.current), []);
 
-  const onSubmit = (e) => {
+  const onSubmit = async (e) => {
     e.preventDefault();
     if (busy) return;
+    setFormError(null);
     let firstBad = null;
     const checks = [
       [username, validateUsername, usernameRef],
@@ -132,13 +146,29 @@ export default function SignupPage() {
       firstBad.current?.focus({ preventScroll: true });
       return;
     }
-    /* UI-only: simulate a request round-trip; backend wires up later. */
     setBusy(true);
-    busyTimer.current = setTimeout(() => setBusy(false), 1200);
+    try {
+      await auth.register({
+        email: email.value.trim(),
+        password: password.value,
+        username: username.value.trim(),
+      });
+      // No verification step — the account is live, go straight in.
+      router.push("/");
+      router.refresh();
+    } catch (err) {
+      const mapped = toFieldError(err);
+      if (mapped?.field === "username") username.fail(mapped.message);
+      else if (mapped?.field === "email") email.fail(mapped.message);
+      else if (mapped?.field === "password") password.fail(mapped.message);
+      else setFormError(err.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const inputShell = (field) =>
-    `t-input patch-input flex w-full items-center gap-2 rounded-md bg-surface-1 px-[14px] py-[10px] text-[15px] text-ink placeholder:text-ink-muted ${HOVER} ${
+    `t-input Nox-input flex w-full items-center gap-2 rounded-md bg-surface-1 px-[14px] py-[10px] text-[15px] text-ink placeholder:text-ink-muted ${HOVER} ${
       field.error ? "is-error" : field.valid ? "is-valid" : ""
     } ${field.shaking ? "is-shaking" : ""}`;
 
@@ -153,17 +183,17 @@ export default function SignupPage() {
       <main className="mx-auto grid w-full max-w-[1199px] flex-1 place-items-center px-5 py-12 sm:px-[30px]">
         <div
           data-open={mounted}
-          className="t-panel-slide patch-auth-enter w-full max-w-[400px]"
+          className="t-panel-slide Nox-auth-enter w-full max-w-[400px]"
         >
           <div className="mb-8 flex flex-col items-start gap-4">
             <Link
               href="/"
-              aria-label="Patch home"
-              className="patch-focus block rounded-[14px]"
+              aria-label="Nox home"
+              className="Nox-focus block rounded-[14px]"
             >
               <span className="block h-12 w-12 overflow-hidden rounded-[14px]">
                 <Image
-                  src="/patch-logo.png"
+                  src="/Nox-logo.png"
                   alt=""
                   aria-hidden="true"
                   width={48}
@@ -175,7 +205,7 @@ export default function SignupPage() {
               </span>
             </Link>
             <div>
-              <h1 className="patch-display text-[30px] leading-[1.1] font-medium tracking-[-1px] text-ink">
+              <h1 className="Nox-display text-[30px] leading-[1.1] font-medium tracking-[-1px] text-ink">
                 Create your account
               </h1>
               <p className="mt-2 text-[15px] leading-[1.3] tracking-[-0.15px] text-ink-muted">
@@ -188,7 +218,7 @@ export default function SignupPage() {
             href="#"
             onClick={(e) => e.preventDefault()}
             aria-label="Continue with Google (coming soon)"
-            className={`patch-focus flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-pill bg-surface-1 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline hover:bg-surface-2 ${HOVER} ${PRESS}`}
+            className={`Nox-focus flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-pill bg-surface-1 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline hover:bg-surface-2 ${HOVER} ${PRESS}`}
           >
             <GoogleMark />
             Continue with Google
@@ -203,6 +233,15 @@ export default function SignupPage() {
           </div>
 
           <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+            {formError ? (
+              <p
+                role="alert"
+                className="rounded-md bg-surface-1 px-[14px] py-[10px] text-[14px] leading-[1.4] text-danger"
+                style={{ boxShadow: "var(--shadow-ring-error)" }}
+              >
+                {formError}
+              </p>
+            ) : null}
             <div className={`t-input-wrap ${username.error ? "is-error" : ""}`}>
               <label
                 htmlFor="signup-username"
@@ -231,7 +270,7 @@ export default function SignupPage() {
               <p
                 id="signup-username-error"
                 role={username.error ? "alert" : undefined}
-                className="t-error-msg patch-error-msg mt-2"
+                className="t-error-msg Nox-error-msg mt-2"
               >
                 {username.error ?? ""}
               </p>
@@ -265,7 +304,7 @@ export default function SignupPage() {
               <p
                 id="signup-email-error"
                 role={email.error ? "alert" : undefined}
-                className="t-error-msg patch-error-msg mt-2"
+                className="t-error-msg Nox-error-msg mt-2"
               >
                 {email.error ?? ""}
               </p>
@@ -300,7 +339,7 @@ export default function SignupPage() {
                   onClick={() => setShowPassword((s) => !s)}
                   aria-pressed={showPassword}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="patch-focus shrink-0 cursor-pointer rounded text-ink-muted hover:text-ink"
+                  className="Nox-focus shrink-0 cursor-pointer rounded text-ink-muted hover:text-ink"
                 >
                   <span
                     className="t-icon-swap"
@@ -319,7 +358,7 @@ export default function SignupPage() {
               <p
                 id="signup-password-error"
                 role={password.error ? "alert" : undefined}
-                className="t-error-msg patch-error-msg mt-2"
+                className="t-error-msg Nox-error-msg mt-2"
               >
                 {password.error ?? ""}
               </p>
@@ -328,7 +367,7 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={busy}
-              className={`patch-focus mt-2 inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-pill border-0 bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black disabled:cursor-wait disabled:opacity-70 ${HOVER} ${PRESS}`}
+              className={`Nox-focus mt-2 inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-pill border-0 bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black disabled:cursor-wait disabled:opacity-70 ${HOVER} ${PRESS}`}
             >
               {busy ? "Creating account…" : "Create account"}
             </button>
@@ -341,7 +380,7 @@ export default function SignupPage() {
             Have an account?{" "}
             <Link
               href="/login"
-              className="patch-focus rounded font-medium text-accent-blue no-underline hover:underline"
+              className="Nox-focus rounded font-medium text-accent-blue no-underline hover:underline"
             >
               Log in
             </Link>

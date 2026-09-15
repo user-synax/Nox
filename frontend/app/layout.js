@@ -17,7 +17,7 @@ const inter = Inter({
 });
 
 export const metadata = {
-  title: "Patch — Debug code. Build skill. Prove it.",
+  title: "Nox — Debug code. Build skill. Prove it.",
   description:
     "Practice real-world debugging by fixing intentionally broken code, passing hidden tests, and building a developer profile that shows what you can actually debug.",
 };

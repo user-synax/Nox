@@ -124,7 +124,7 @@ export default function Home() {
       <header className="sticky mt-4 top-0 z-50 bg-canvas">
         <div
           data-open={mounted}
-          className="t-panel-slide patch-nav-enter relative mx-auto w-full max-w-[1199px]"
+          className="t-panel-slide Nox-nav-enter relative mx-auto w-full max-w-[1199px]"
         >
           <nav
             aria-label="Primary"
@@ -133,13 +133,13 @@ export default function Home() {
             {/* Left — wordmark */}
             <Link
               href="/"
-              aria-label="Patch home"
-              className="patch-focus flex shrink-0 items-center gap-2.5 rounded-full"
+              aria-label="Nox home"
+              className="Nox-focus flex shrink-0 items-center gap-2.5 rounded-full"
             >
               <span className="block h-12 w-12 shrink-0 overflow-hidden rounded-full bg-transparent">
                 <Image
-                  src="/patch-logo.png"
-                  alt="Patch logo"
+                  src="/Nox-logo.png"
+                  alt="Nox logo"
                   width={32}
                   height={32}
                   priority
@@ -147,8 +147,8 @@ export default function Home() {
                   className="h-12 w-12 object-cover"
                 />
               </span>
-              <span className="patch-display text-[26px] leading-none font-semibold tracking-[-0.02em] text-ink">
-                Patch
+              <span className="Nox-display text-[26px] leading-none font-semibold tracking-[-0.02em] text-ink">
+                Nox
               </span>
             </Link>
 
@@ -176,7 +176,7 @@ export default function Home() {
                     aria-selected={active === i ? "true" : "false"}
                     tabIndex={active === i ? 0 : -1}
                     onClick={() => selectTab(i)}
-                    className="t-tab patch-focus text-[14px] font-medium whitespace-nowrap no-underline"
+                    className="t-tab Nox-focus text-[14px] font-medium whitespace-nowrap no-underline"
                   >
                     {link.label}
                   </Link>
@@ -188,19 +188,19 @@ export default function Home() {
             <div className="flex shrink-0 items-center gap-2">
               <Link
                 href="/login"
-                className={`patch-focus hidden rounded-pill bg-surface-1 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline hover:bg-surface-2 min-[810px]:inline-flex ${HOVER}`}
+                className={`Nox-focus hidden rounded-pill bg-surface-1 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline hover:bg-surface-2 min-[810px]:inline-flex ${HOVER}`}
               >
                 Log in
               </Link>
               <Link
                 href="/signup"
-                className={`patch-focus hidden rounded-pill bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black no-underline sm:inline-flex ${HOVER} ${PRESS}`}
+                className={`Nox-focus hidden rounded-pill bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black no-underline sm:inline-flex ${HOVER} ${PRESS}`}
               >
-                Start Patching
+                Start Noxing
               </Link>
               <Link
                 href="/signup"
-                className={`patch-focus inline-flex rounded-pill bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black no-underline sm:hidden ${HOVER} ${PRESS}`}
+                className={`Nox-focus inline-flex rounded-pill bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black no-underline sm:hidden ${HOVER} ${PRESS}`}
               >
                 Start
               </Link>
@@ -210,9 +210,9 @@ export default function Home() {
                 type="button"
                 onClick={toggleMobile}
                 aria-expanded={mobileOpen}
-                aria-controls="patch-mobile-menu"
+                aria-controls="Nox-mobile-menu"
                 aria-label={mobileOpen ? "Close menu" : "Open menu"}
-                className={`patch-focus inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-surface-1 text-ink hover:bg-surface-2 min-[810px]:hidden ${HOVER}`}
+                className={`Nox-focus inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-surface-1 text-ink hover:bg-surface-2 min-[810px]:hidden ${HOVER}`}
               >
                 <span
                   className="t-icon-swap"
@@ -233,7 +233,7 @@ export default function Home() {
           {/* Mobile hamburger overlay */}
           <div className="absolute inset-x-4 top-[calc(100%+8px)] min-[810px]:hidden">
             <div
-              id="patch-mobile-menu"
+              id="Nox-mobile-menu"
               data-origin="top-center"
               className={`t-dropdown ${dropdownState}`}
             >
@@ -257,7 +257,7 @@ export default function Home() {
                           setActive(i);
                           closeMobile();
                         }}
-                        className={`patch-focus flex items-center justify-between rounded-md px-3 py-2.5 text-[14px] font-medium no-underline ${HOVER} ${
+                        className={`Nox-focus flex items-center justify-between rounded-md px-3 py-2.5 text-[14px] font-medium no-underline ${HOVER} ${
                           active === i
                             ? "bg-surface-2 text-ink"
                             : "bg-transparent text-ink-muted hover:bg-surface-2 hover:text-ink"
@@ -282,7 +282,7 @@ export default function Home() {
                     href="/login"
                     tabIndex={mobileOpen ? 0 : -1}
                     onClick={closeMobile}
-                    className={`patch-focus inline-flex w-full items-center justify-center rounded-pill bg-surface-2 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline ${HOVER}`}
+                    className={`Nox-focus inline-flex w-full items-center justify-center rounded-pill bg-surface-2 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline ${HOVER}`}
                   >
                     Log in
                   </Link>
@@ -290,9 +290,9 @@ export default function Home() {
                     href="/signup"
                     tabIndex={mobileOpen ? 0 : -1}
                     onClick={closeMobile}
-                    className={`patch-focus inline-flex w-full items-center justify-center rounded-pill bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black no-underline ${HOVER} ${PRESS}`}
+                    className={`Nox-focus inline-flex w-full items-center justify-center rounded-pill bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black no-underline ${HOVER} ${PRESS}`}
                   >
-                    Start Patching
+                    Start Noxing
                   </Link>
                 </div>
               </div>
@@ -303,7 +303,7 @@ export default function Home() {
 
       {/* Landing canvas — future blocks append below. Navbar only for now. */}
       <main className="mx-auto w-full max-w-[1199px] px-5 sm:px-[30px]">
-        <h1 className="sr-only">Patch — Practice real-world debugging</h1>
+        <h1 className="sr-only">Nox — Practice real-world debugging</h1>
         {/* Next block goes here */}
       </main>
     </div>

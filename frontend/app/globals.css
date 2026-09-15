@@ -339,52 +339,52 @@
   .t-input { animation: none !important; transform: none !important; }
 }
 
-/* Patch navbar — DESIGN.md extras only: entrance travel override (tunable var),
+/* Nox navbar — DESIGN.md extras only: entrance travel override (tunable var),
    display wordmark voice, tabular numerals. */
-.patch-nav-enter {
+.Nox-nav-enter {
   --panel-translate-y: -16px;
 }
-/* Patch auth — text-input spec + error-shake hooks (own colors/type only,
+/* Nox auth — text-input spec + error-shake hooks (own colors/type only,
    the t-* rules above own the tweens). Border-width stays constant so the
    error tween never shifts inner content. */
-.patch-auth-enter {
+.Nox-auth-enter {
   --panel-translate-y: 16px;
 }
-.patch-input {
+.Nox-input {
   border: 1px solid var(--color-hairline-soft);
 }
-.patch-input:focus-within {
+.Nox-input:focus-within {
   border-color: var(--color-hairline);
   box-shadow: var(--shadow-ring-focus);
 }
-.patch-input.is-error {
+.Nox-input.is-error {
   border-color: var(--color-danger);
 }
-.patch-input.is-error:focus-within {
+.Nox-input.is-error:focus-within {
   border-color: var(--color-danger);
   box-shadow: var(--shadow-ring-error);
 }
-.patch-input.is-valid {
+.Nox-input.is-valid {
   border-color: var(--color-success);
 }
-.patch-input.is-valid:focus-within {
+.Nox-input.is-valid:focus-within {
   border-color: var(--color-success);
   box-shadow: var(--shadow-ring-focus);
 }
-.patch-error-msg {
+.Nox-error-msg {
   font-size: 13px;
   line-height: 1.2;
   letter-spacing: -0.13px;
   color: var(--color-ink);
 }
-.patch-focus:focus-visible {
+.Nox-focus:focus-visible {
   outline: none;
   box-shadow: var(--shadow-ring-focus);
 }
-.patch-display {
+.Nox-display {
   font-family: var(--font-display);
 }
-.patch-mono {
+.Nox-mono {
   font-family: var(--font-mono);
   font-feature-settings: "tnum" 1;
 }

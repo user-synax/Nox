@@ -1,7 +1,7 @@
-# Patch — Product Requirements Document
+# Nox — Product Requirements Document
 
-**Product:** Patch  
-**Domain:** `patch.synax.me`  
+**Product:** Nox  
+**Domain:** `Nox.synax.me`  
 **Status:** MVP Planning  
 **Document Version:** 1.0  
 **Last Updated:** 2026-09-15  
@@ -11,11 +11,11 @@
 
 ## 1. Product Summary
 
-### 1.1 What is Patch?
+### 1.1 What is Nox?
 
-Patch is a developer practice and competitive platform focused on **real-world debugging**.
+Nox is a developer practice and competitive platform focused on **real-world debugging**.
 
-Instead of asking developers to write a solution from scratch, Patch gives them intentionally broken code and asks them to understand the existing implementation, identify the root cause, fix it, and prove the fix with automated tests.
+Instead of asking developers to write a solution from scratch, Nox gives them intentionally broken code and asks them to understand the existing implementation, identify the root cause, fix it, and prove the fix with automated tests.
 
 The core product loop is:
 
@@ -47,11 +47,11 @@ Share solution
 
 > Developers spend significant time debugging existing systems, but most coding practice platforms primarily test greenfield problem solving.
 
-Patch focuses on the skill of entering an existing codebase, understanding what is wrong, fixing it, and validating the result.
+Nox focuses on the skill of entering an existing codebase, understanding what is wrong, fixing it, and validating the result.
 
 ### 1.3 Product positioning
 
-**Patch — Practice the skill developers use every day: debugging.**
+**Nox — Practice the skill developers use every day: debugging.**
 
 Alternative positioning:
 
@@ -249,14 +249,14 @@ Debugging   95%
 ### Profile URL
 
 ```text
-patch.synax.me/u/[username]
+Nox.synax.me/u/[username]
 ```
 
 ---
 
 # 7. Challenge System
 
-Challenges are the core content unit of Patch.
+Challenges are the core content unit of Nox.
 
 ## 7.1 Challenge model
 
@@ -407,7 +407,7 @@ Use **Monaco Editor**.
 
 # 10. Code Execution and Sandboxing
 
-This is the most security-sensitive part of Patch.
+This is the most security-sensitive part of Nox.
 
 ## 10.1 Requirement
 
@@ -575,7 +575,7 @@ A submission that does not satisfy all required hidden tests is not an accepted 
 
 # 14. Competitive Rating
 
-Patch separates **rating** from **XP**.
+Nox separates **rating** from **XP**.
 
 ## Rating
 
@@ -782,7 +782,7 @@ Persist notifications in MongoDB so they remain available after reconnect.
 
 # 22. Admin System
 
-Patch requires an admin surface from the beginning because challenge quality and execution safety cannot depend entirely on user-generated content.
+Nox requires an admin surface from the beginning because challenge quality and execution safety cannot depend entirely on user-generated content.
 
 ## MVP admin features
 
@@ -857,7 +857,7 @@ MVP should prioritize mechanisms that materially protect challenge integrity wit
 - Aggressive tab-switch enforcement.
 - DevTools blocking.
 
-Patch should avoid creating a hostile assessment experience before it becomes an assessment product.
+Nox should avoid creating a hostile assessment experience before it becomes an assessment product.
 
 ---
 
@@ -947,7 +947,7 @@ Application deployment may use Vercel for the frontend and a separate backend/wo
 Recommended monorepo:
 
 ```text
-patch/
+Nox/
 ├── apps/
 │   ├── web/
 │   └── api/
@@ -1178,7 +1178,7 @@ GET    /auth/me
 
 ```text
 GET    /users/:username
-PATCH  /users/me
+Nox  /users/me
 GET    /users/me/stats
 ```
 
@@ -1239,11 +1239,11 @@ POST   /notifications/read-all
 GET    /admin/users
 GET    /admin/challenges
 POST   /admin/challenges
-PATCH  /admin/challenges/:id
+Nox  /admin/challenges/:id
 POST   /admin/challenges/:id/publish
 GET    /admin/submissions
 GET    /admin/reports
-PATCH  /admin/reports/:id
+Nox  /admin/reports/:id
 ```
 
 ---
@@ -1319,7 +1319,7 @@ Supporting text:
 
 Primary CTA:
 
-> Start Patching
+> Start Noxing
 
 Secondary CTA:
 
@@ -1327,7 +1327,7 @@ Secondary CTA:
 
 ### Supporting sections
 
-1. How Patch works.
+1. How Nox works.
 2. Example broken-code challenge.
 3. Competitive progression.
 4. Developer profiles.
@@ -1361,7 +1361,7 @@ Warning:           #F5C451
 Danger:            #F45D6F
 ```
 
-The primary blue is intentionally similar to the Synax/CampusZen visual language but Patch should remain independently recognizable.
+The primary blue is intentionally similar to the Synax/CampusZen visual language but Nox should remain independently recognizable.
 
 ## Typography
 
@@ -1400,7 +1400,7 @@ MVP requirements:
 
 # 35. Security Requirements
 
-Security is a core product requirement because Patch intentionally executes untrusted source code.
+Security is a core product requirement because Nox intentionally executes untrusted source code.
 
 ## Application security
 
@@ -1578,7 +1578,7 @@ Infrastructure failures must never unfairly punish users.
 
 # 41. MVP Acceptance Criteria
 
-Patch MVP is considered complete when a new user can:
+Nox MVP is considered complete when a new user can:
 
 1. Create an account.
 2. Verify the account.
@@ -1698,12 +1698,12 @@ Examples:
 
 - Root-cause quality.
 - Efficiency.
-- Patch size.
+- Nox size.
 - Regression protection.
 
 ---
 
-## Phase 3 — Competitive Patch
+## Phase 3 — Competitive Nox
 
 - Seasons.
 - Divisions.
@@ -1739,7 +1739,7 @@ Community challenges require review before publication.
 
 ## Phase 5 — Security & Production Debugging
 
-Expand Patch beyond generic debugging.
+Expand Nox beyond generic debugging.
 
 ### Security challenges
 
@@ -1791,7 +1791,7 @@ AI must be designed carefully so users cannot simply ask an agent to solve the c
 
 ## Phase 7 — Developer Portfolio
 
-Turn Patch profiles into stronger professional artifacts.
+Turn Nox profiles into stronger professional artifacts.
 
 Potential features:
 
@@ -1806,7 +1806,7 @@ Potential features:
 Potential profile concept:
 
 ```text
-Patch Profile
+Nox Profile
 
 Debugging        95
 Backend          88
@@ -1832,7 +1832,7 @@ Companies could:
 - Compare candidates.
 - Generate skill reports.
 
-This transforms Patch from a practice platform into a developer evaluation product.
+This transforms Nox from a practice platform into a developer evaluation product.
 
 ---
 
@@ -1901,8 +1901,8 @@ These items can be changed without rewriting the overall PRD.
 
 | Decision | Current Default |
 |---|---|
-| Product name | Patch |
-| Domain | patch.synax.me |
+| Product name | Nox |
+| Domain | Nox.synax.me |
 | Product model | Developer practice + competition |
 | Primary interaction | Solo debugging |
 | MVP languages | JS / TS / Python |
@@ -2012,7 +2012,7 @@ These items can be changed without rewriting the overall PRD.
 
 # 49. Launch Definition
 
-Patch is ready for an initial public beta when:
+Nox is ready for an initial public beta when:
 
 - At least one complete challenge category is well-curated.
 - JavaScript execution is reliable.
@@ -2030,7 +2030,7 @@ Patch is ready for an initial public beta when:
 
 # 50. Final Product Definition
 
-Patch is a **solo, competitive debugging platform** where developers practice fixing broken code across multiple programming languages.
+Nox is a **solo, competitive debugging platform** where developers practice fixing broken code across multiple programming languages.
 
 Its MVP focuses on:
 
@@ -2056,7 +2056,7 @@ Share knowledge
 
 The long-term vision is broader:
 
-> **Patch becomes a platform for proving practical software engineering skill through debugging, security, performance, and production-style engineering challenges.**
+> **Nox becomes a platform for proving practical software engineering skill through debugging, security, performance, and production-style engineering challenges.**
 
 ---
 
@@ -2065,7 +2065,7 @@ The long-term vision is broader:
 ## v1.0 — 2026-09-15
 
 - Initial PRD.
-- Product renamed from working name "Forge" to "Patch".
+- Product renamed from working name "Forge" to "Nox".
 - Defined solo debugging-first product model.
 - Defined MVP scope.
 - Defined execution/sandbox architecture.
