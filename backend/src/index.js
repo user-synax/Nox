@@ -10,6 +10,7 @@ import { createAuthRoutes } from "./routes/auth.js";
 import { createUserRoutes } from "./routes/users.js";
 import { createChallengeRoutes } from "./routes/challenges.js";
 import { createAdminRoutes } from "./routes/admin.js";
+import { createRunRoutes } from "./routes/runs.js";
 
 // Connect first: auth + indexes depend on the database.
 // A missing/unreachable MongoDB fails fast here with a clear message.
@@ -76,6 +77,10 @@ app.use(createChallengeRoutes(auth, db));
 app.use("/api", createChallengeRoutes(auth, db));
 app.use(createAdminRoutes(auth, db));
 app.use("/api", createAdminRoutes(auth, db));
+
+// Visible-test execution queue (PRD §10/§12).
+app.use(createRunRoutes(auth, db));
+app.use("/api", createRunRoutes(auth, db));
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });

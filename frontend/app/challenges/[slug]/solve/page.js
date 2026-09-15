@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, FileCode2, FlaskConical, LayoutDashboard, Lock, RotateCcw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, FileCode2, FlaskConical, LayoutDashboard, LoaderCircle, Lock, RotateCcw, X } from "lucide-react";
 import { auth, signOutAndLogin } from "../../../../lib/auth";
 import {
   saveDraft,
@@ -29,6 +29,8 @@ const CodeEditor = dynamic(
 
 const HOVER =
   "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]";
+
+const TERMINAL_RUN = ["passed", "failed", "timeout", "runtime-error", "system-error"];
 
 function SaveStatus({ saving, dirtyCount, savedAt }) {
   const text = saving
@@ -67,9 +69,15 @@ export default function SolvePage({ params }) {
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState(null);
   const [mounted, setMounted] = useState(false);
+  // Run lifecycle: idle → queued → running → done (runResult set) / error.
+  const [runPhase, setRunPhase] = useState("idle");
+  const [runResult, setRunResult] = useState(null);
+  const [runError, setRunError] = useState(null);
+  const [runNotice, setRunNotice] = useState(null);
 
   const editorRef = useRef(null);
   const saveTimer = useRef(null);
+  const pollTimer = useRef(null);
   const challengeRef = useRef(null);
   const usernameRef = useRef("");
 
@@ -136,7 +144,13 @@ export default function SolvePage({ params }) {
     return () => cancelAnimationFrame(raf);
   }, [files]);
 
-  useEffect(() => () => clearTimeout(saveTimer.current), []);
+  useEffect(
+    () => () => {
+      clearTimeout(saveTimer.current);
+      clearTimeout(pollTimer.current);
+    },
+    []
+  );
 
   const persist = useCallback((path, value) => {
     const user = usernameRef.current;
@@ -172,6 +186,55 @@ export default function SolvePage({ params }) {
     const editor = editorRef.current;
     if (editor && activePath) persist(activePath, editor.getValue(activePath));
   }, [activePath, persist]);
+  const onRun = useCallback(async () => {
+    const editor = editorRef.current;
+    const ch = challengeRef.current;
+    if (!editor || !ch || !files || runPhase === "queued" || runPhase === "running") return;
+    clearTimeout(pollTimer.current);
+    setRunError(null);
+    setRunNotice(null);
+    setRunResult(null);
+    setRunPhase("queued");
+    flushSave();
+    try {
+      const payload = files.map((f) => ({
+        path: f.path,
+        content: editor.getValue(f.path),
+      }));
+      const { runId } = await auth.runTests(ch.slug, payload);
+      setRunPhase("running");
+      const started = Date.now();
+      const tick = async () => {
+        let run = null;
+        try {
+          run = (await auth.getRun(runId)).run;
+        } catch {
+          /* transient — keep polling */
+        }
+        if (run && TERMINAL_RUN.includes(run.status)) {
+          setRunResult(run);
+          setRunNotice(null);
+          setRunPhase("done");
+          return;
+        }
+        // Still queued after 5s = no worker is picking jobs up. Say so
+        // instead of spinning silently (usually a dev-env worker miss).
+        if (run && run.status === "queued" && Date.now() - started > 5000) {
+          setRunNotice("Waiting for a worker to pick this up…");
+        }
+        if (Date.now() - started > 60000) {
+          setRunError("Still working — keep waiting or run again.");
+          setRunPhase("idle");
+          return;
+        }
+        pollTimer.current = setTimeout(tick, 400);
+      };
+      pollTimer.current = setTimeout(tick, 150);
+    } catch (err) {
+      setRunError(err.message);
+      setRunPhase("idle");
+    }
+  }, [files, flushSave, runPhase]);
 
   const resetFile = useCallback(
     async (path) => {
@@ -373,38 +436,108 @@ export default function SolvePage({ params }) {
             <h2 className="flex items-center gap-2 text-[13px] font-medium tracking-[-0.13px] text-ink-muted">
               <FlaskConical size={14} aria-hidden="true" />
               Visible tests ({tests.length})
+              {runResult ? (
+                <span
+                  className={`ml-auto rounded-pill px-2 py-0.5 text-[11px] font-medium ${
+                    runResult.status === "passed"
+                      ? "bg-success/15 text-success"
+                      : "bg-danger/15 text-danger"
+                  }`}
+                  role="status"
+                >
+                  {runResult.status === "passed"
+                    ? "Passed"
+                    : runResult.status === "failed"
+                      ? `${runResult.testsPassed}/${runResult.testsTotal} passed`
+                      : runResult.status}
+                </span>
+              ) : null}
             </h2>
             <ul className="mt-3 flex max-h-[300px] flex-col gap-2 overflow-y-auto lg:max-h-none">
-              {tests.map((t, i) => (
-                <li key={i} className="rounded-md bg-canvas px-3 py-2.5">
-                  <p className="text-[13.5px] font-medium text-ink">{t.name}</p>
-                  <p className="Nox-mono mt-1 truncate text-[12px] text-ink-muted">
-                    → {JSON.stringify(t.expected)}
-                  </p>
-                </li>
-              ))}
+              {(runResult?.results?.length ? runResult.results : tests).map((t, i) => {
+                const verdict = runResult?.results?.length ? t.passed : null;
+                return (
+                  <li key={i} className="rounded-md bg-canvas px-3 py-2.5">
+                    <p className="flex items-center gap-2 text-[13.5px] font-medium text-ink">
+                      {verdict === true ? (
+                        <Check size={14} strokeWidth={3} aria-label="passed" className="shrink-0 text-success" />
+                      ) : verdict === false ? (
+                        <X size={14} strokeWidth={3} aria-label="failed" className="shrink-0 text-danger" />
+                      ) : null}
+                      <span className="truncate">{t.name}</span>
+                    </p>
+                    {verdict === false && t.error ? (
+                      <pre className="mt-1.5 overflow-x-auto rounded bg-black/40 p-2 font-mono text-[11.5px] leading-[1.5] whitespace-pre-wrap text-danger">
+                        {t.error}
+                      </pre>
+                    ) : verdict === false ? (
+                      <div className="Nox-mono mt-1.5 grid gap-1 text-[11.5px] leading-[1.5]">
+                        <p className="truncate text-ink-muted">
+                          want <span className="text-success">{JSON.stringify(t.expected)}</span>
+                        </p>
+                        <p className="truncate text-ink-muted">
+                          got <span className="text-danger">{JSON.stringify(t.actual)}</span>
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="Nox-mono mt-1 truncate text-[12px] text-ink-muted">
+                        → {JSON.stringify(t.expected ?? tests[i]?.expected)}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
+            {runResult && ["timeout", "runtime-error", "system-error"].includes(runResult.status) ? (
+              <p
+                role="alert"
+                className="mt-3 flex items-start gap-2 rounded-md bg-canvas px-3 py-2.5 text-[12.5px] leading-[1.5] text-danger"
+              >
+                <AlertTriangle size={14} aria-hidden="true" className="mt-0.5 shrink-0" />
+                <span className="font-mono whitespace-pre-wrap">{runResult.error}</span>
+              </p>
+            ) : null}
+            {runError ? (
+              <p role="alert" className="mt-3 text-[12.5px] leading-[1.5] text-danger">
+                {runError}
+              </p>
+            ) : null}
+            {runNotice && !runError ? (
+              <p role="status" className="mt-3 text-[12.5px] leading-[1.5] text-ink-muted">
+                {runNotice}
+              </p>
+            ) : null}
           </div>
           <div className="rounded-xl bg-surface-1 p-4">
             <button
               type="button"
-              disabled
-              aria-disabled="true"
-              className="inline-flex min-h-[44px] w-full cursor-not-allowed items-center justify-center gap-2 rounded-pill bg-white px-4 text-[14px] font-medium text-black opacity-50"
+              onClick={onRun}
+              disabled={runPhase === "queued" || runPhase === "running"}
+              className={`Nox-focus inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2 rounded-pill border-0 bg-white px-4 text-[14px] font-medium text-black disabled:cursor-wait disabled:opacity-70 ${HOVER}`}
             >
-              <Lock size={15} aria-hidden="true" />
-              Run tests
+              {runPhase === "queued" || runPhase === "running" ? (
+                <>
+                  <LoaderCircle size={15} aria-hidden="true" className="animate-spin" />
+                  {runPhase === "queued" ? "Queued…" : "Running…"}
+                </>
+              ) : (
+                "Run tests"
+              )}
             </button>
             <button
               type="button"
               disabled
               aria-disabled="true"
-              className={`mt-2 inline-flex min-h-[44px] w-full cursor-not-allowed items-center justify-center rounded-pill bg-surface-2 px-4 text-[14px] font-medium text-ink-muted ${HOVER}`}
+              className={`mt-2 inline-flex min-h-[44px] w-full cursor-not-allowed items-center justify-center gap-2 rounded-pill bg-surface-2 px-4 text-[14px] font-medium text-ink-muted ${HOVER}`}
             >
+              <Lock size={15} aria-hidden="true" />
               Submit
             </button>
             <p className="mt-3 text-[12px] leading-[1.5] text-ink-muted">
-              Drafts autosave locally. Running + judging arrive with the execution engine.
+              {runResult?.executionTimeMs != null
+                ? `Last run took ${runResult.executionTimeMs} ms. `
+                : ""}
+              Drafts autosave locally. Hidden-test judging arrives next.
             </p>
             <div className="mt-3 flex gap-2 border-t border-hairline-soft pt-3 lg:hidden">
               <button

@@ -97,6 +97,7 @@ export const LANGUAGES = ["javascript", "typescript", "Python"];
 
 /** Challenge categories repurposed as onboarding interests (PRD §7.3). */
 export const INTERESTS = [
+  "newbies",
   "general",
   "algorithms",
   "frontend",
@@ -177,6 +178,16 @@ export const challengeWriteSchema = z.object({
   starterFiles: z.array(starterFileSchema).min(1).max(20),
   visibleTests: z.array(testCaseSchema).min(1).max(50),
   hiddenTests: z.array(testCaseSchema).max(100).default([]),
+  // Execution entry: which export the judge calls. testContext appends
+  // extra trailing args (evaluated in the harness, admin-authored).
+  entryFile: z.string().trim().min(1).max(120),
+  entryFunction: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .regex(/^[A-Za-z_$][A-Za-z0-9_$]*$/, "Entry function must be a valid identifier."),
+  testContext: z.record(z.string(), z.string().max(5000)).default({}),
   constraints: z.string().trim().max(2000).default(""),
   hints: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
   timeLimitMs: z.number().int().min(100).max(30_000).default(2000),
@@ -195,4 +206,22 @@ export const challengeListQuerySchema = z.object({
   sort: z.enum(CHALLENGE_SORTS).default("recommended"),
   page: z.coerce.number().int().min(1).max(1000).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+/* ── Execution (run visible tests) ──────────────────────────────── */
+
+/** Languages the workers can actually execute (rest → 422 for now). */
+export const EXECUTABLE_LANGUAGES = ["javascript", "Python"];
+
+/** POST /challenges/:id/run — user code snapshot (merged over starters). */
+export const runRequestSchema = z.object({
+  files: z
+    .array(
+      z.object({
+        path: z.string().trim().min(1).max(120),
+        content: z.string().max(100_000),
+      })
+    )
+    .min(1)
+    .max(20),
 });

@@ -34,6 +34,17 @@ function shape(doc) {
   return { id: _id?.toString?.() ?? doc.id, ...rest };
 }
 
+/** entryFile must exist in the effective starter set (else workers 500). */
+function checkEntry(res, entryFile, starterFiles) {
+  if (entryFile === undefined) return true;
+  const paths = new Set((starterFiles ?? []).map((f) => f.path));
+  if (!paths.has(entryFile)) {
+    res.status(422).json({ error: `entryFile "${entryFile}" is not a starter file.` });
+    return false;
+  }
+  return true;
+}
+
 /** Content edits invalidate old submissions → bump the version. */
 const VERSIONED_KEYS = new Set([
   "title",
@@ -44,6 +55,9 @@ const VERSIONED_KEYS = new Set([
   "constraints",
   "timeLimitMs",
   "memoryLimitMb",
+  "entryFile",
+  "entryFunction",
+  "testContext",
 ]);
 
 export function createAdminRoutes(auth, db) {
@@ -73,6 +87,7 @@ export function createAdminRoutes(auth, db) {
         return res.status(422).json({ error: "That slug is taken." });
       }
       const now = new Date();
+      if (!checkEntry(res, data.entryFile, data.starterFiles)) return;
       const { insertedId } = await challenges().insertOne({
         ...data,
         slug,
@@ -121,6 +136,9 @@ export function createAdminRoutes(auth, db) {
 
         const set = { ...req.body, updatedAt: new Date() };
         if (set.tags) set.tags = [...new Set(set.tags)];
+        const effectiveFiles = set.starterFiles ?? existing.starterFiles ?? [];
+        const effectiveEntry = set.entryFile ?? existing.entryFile;
+        if (!checkEntry(res, effectiveEntry, effectiveFiles)) return;
         if (Object.keys(req.body).some((k) => VERSIONED_KEYS.has(k))) {
           set.version = (existing.version ?? 1) + 1;
         }

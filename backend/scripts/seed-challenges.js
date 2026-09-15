@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Curated MVP challenge seeds — 5 real JavaScript debugging challenges.
  * Usage: bun scripts/seed-challenges.js [--author email]
  *
@@ -11,7 +11,7 @@
 const CHALLENGES = [
   {
     title: "Off by One: Cart Total",
-    slug: "off-by-one-cart-total",
+    slug: "off-by-one-cart-total", entryFile: "cart.js", entryFunction: "cartTotal",
     description: `The checkout page undercharges every order. Customers noticed before finance did.
 
 \`cartTotal(prices)\` should return the sum of every price in the array. Right now the last item never gets counted — a single order of one item totals $0.
@@ -57,7 +57,7 @@ export function cartTotal(prices) {
   },
   {
     title: "Falsy Trap: Compact IDs",
-    slug: "falsy-trap-compact-ids",
+    slug: "falsy-trap-compact-ids", entryFile: "ids.js", entryFunction: "compactIds",
     description: `User ID 0 is a real user (the very first account), but they keep vanishing from admin lists.
 
 \`compactIds(ids)\` should strip only null, undefined, and empty-string entries. Right now it treats 0 as missing too — JavaScript falsiness strikes again.
@@ -103,7 +103,7 @@ export function compactIds(ids) {
   },
   {
     title: "Floating Promises: Batch Usernames",
-    slug: "floating-promises-batch-usernames",
+    slug: "floating-promises-batch-usernames", entryFile: "users.js", entryFunction: "getUsernames", testContext: { db: "({ fetchUser: async (id) => { await new Promise((r) => setTimeout(r, Math.random() * 25)); return { name: \"abcde\"[id - 1] ?? (\"user\" + id) }; } })" },
     description: `The admin panel renders "[object Promise], [object Promise]" instead of usernames. Production is not amused.
 
 \`getUsernames(ids, db)\` must resolve every id through \`db.fetchUser(id)\` (which returns a Promise of { name }) and return the names IN ORDER. Right now it hands back an array of unsettled promises.
@@ -129,9 +129,9 @@ export function getUsernames(ids, db) {
     visibleTests: [
       {
         name: "resolves two users in order",
-        description: "db.fetchUser resolves { name } per id.",
+        description: "db.fetchUser resolves { name } per id; ids map to letters a–e.",
         input: [[3, 1]],
-        expected: ["cara", "ada"],
+        expected: ["c", "a"],
       },
     ],
     hiddenTests: [
@@ -150,7 +150,7 @@ export function getUsernames(ids, db) {
   },
   {
     title: "Reference Trap: Dedupe Users",
-    slug: "reference-trap-dedupe-users",
+    slug: "reference-trap-dedupe-users", entryFile: "roster.js", entryFunction: "dedupeUsers",
     description: `The team roster shows the same person three times. The dedupe helper runs, changes nothing, and everyone blames the database.
 
 \`dedupeUsers(users)\` should drop repeat appearances of the same id, keeping the FIRST occurrence and the original order. Right now it relies on reference equality, so two objects with the same id look "different".
@@ -209,7 +209,7 @@ export function dedupeUsers(users) {
   },
   {
     title: "Blind Spot: Binary Search Bounds",
-    slug: "blind-spot-binary-search",
+    slug: "blind-spot-binary-search", entryFile: "search.js", entryFunction: "binarySearch",
     description: `Search works — except when the answer sits at the edges. First and last elements of large sorted arrays come back "not found", and the on-call rotation is tired of it.
 
 \`binarySearch(sorted, target)\` must return the index of target or -1. The loop quits one step too early, so boundary elements are never examined.
@@ -263,6 +263,178 @@ export function binarySearch(sorted, target) {
     timeLimitMs: 2000,
     memoryLimitMb: 64,
     estimatedSolveMinutes: 25,
+    status: "published",
+  },
+  {
+    title: "Stringly Typed: Add Scores",
+    slug: "stringly-typed-add-scores",
+    description: `The leaderboard total shows "53" instead of 8. Form values arrive as STRINGS, and JavaScript happily "adds" them by gluing.
+
+\`addScores(a, b)\` must return the NUMERIC sum of its two arguments, whether they arrive as numbers or numeric strings.
+
+Convert first, then add.`,
+    kind: "bug-fix",
+    language: "javascript",
+    difficulty: "easy",
+    category: "newbies",
+    tags: ["types", "coercion", "numbers"],
+    starterFiles: [
+      {
+        path: "scores.js",
+        content: `// Adds two form values. Values may arrive as numbers or numeric
+// strings — the result must always be a real number.
+export function addScores(a, b) {
+  return a + b;
+}
+`,
+      },
+    ],
+    entryFile: "scores.js",
+    entryFunction: "addScores",
+    visibleTests: [
+      { name: "adds numbers", input: [2, 3], expected: 5 },
+      { name: "adds numeric strings", input: ["2", "3"], expected: 5 },
+    ],
+    hiddenTests: [
+      { name: "mixed string and number", input: ["4", 6], expected: 10 },
+      { name: "decimals", input: ["0.5", "0.25"], expected: 0.75 },
+      { name: "zeroes", input: ["0", 0], expected: 0 },
+    ],
+    constraints: "Inputs are numbers or numeric strings.",
+    hints: [
+      "What does + do when either side is a string?",
+      "There is a built-in that turns numeric strings into numbers.",
+    ],
+    timeLimitMs: 2000,
+    memoryLimitMb: 64,
+    estimatedSolveMinutes: 5,
+    status: "published",
+  },
+  {
+    title: "Watch Your Step: Greet",
+    slug: "watch-your-step-greet",
+    description: `Nothing runs at all — Python refuses to even load the file. Read the error message: it tells you the exact line.
+
+\`greet(name)\` should return "Hello, <name>!". Right now the return statement sits at the wrong indentation level, which is a hard error in Python, not a quirk.
+
+Fix the indentation so the module loads and the function works.`,
+    kind: "runtime-error",
+    language: "Python",
+    difficulty: "easy",
+    category: "newbies",
+    tags: ["Python", "indentation", "syntax"],
+    starterFiles: [
+      {
+        path: "greet.py",
+        content: `def greet(name):
+return "Hello, " + name + "!"
+`,
+      },
+    ],
+    entryFile: "greet.py",
+    entryFunction: "greet",
+    visibleTests: [
+      { name: "greets Ada", input: ["Ada"], expected: "Hello, Ada!" },
+    ],
+    hiddenTests: [
+      { name: "greets Grace", input: ["Grace"], expected: "Hello, Grace!" },
+      { name: "empty name", input: [""], expected: "Hello, !" },
+    ],
+    constraints: "name is a string.",
+    hints: [
+      "In Python, indentation IS structure — a function body must sit one level in.",
+      "Most editors can convert the fix to 4 spaces automatically.",
+    ],
+    timeLimitMs: 2000,
+    memoryLimitMb: 64,
+    estimatedSolveMinutes: 5,
+    status: "published",
+  },
+  {
+    title: "Floor It: Average",
+    slug: "floor-it-average",
+    description: `Test scores average 1.5, but the report prints 1. Somewhere a division is rounding DOWN.
+
+\`average(nums)\` should return the exact mean. Right now it uses floor division, which silently drops every fraction.
+
+Pick the division that keeps the decimal part.`,
+    kind: "logic-error",
+    language: "Python",
+    difficulty: "easy",
+    category: "newbies",
+    tags: ["Python", "division", "numbers"],
+    starterFiles: [
+      {
+        path: "stats.py",
+        content: `def average(nums):
+    return sum(nums) // len(nums)
+`,
+      },
+    ],
+    entryFile: "stats.py",
+    entryFunction: "average",
+    visibleTests: [
+      { name: "even average", input: [[2, 4, 6]], expected: 4 },
+      { name: "fractional average", input: [[1, 2]], expected: 1.5 },
+    ],
+    hiddenTests: [
+      { name: "single score", input: [[5]], expected: 5 },
+      { name: "long decimal", input: [[1, 2, 4]], expected: 2.3333333333333335 },
+    ],
+    constraints: "nums is a non-empty list of numbers.",
+    hints: [
+      "Python has two division operators. What does each one promise?",
+      "// always rounds down — even when the math doesn't.",
+    ],
+    timeLimitMs: 2000,
+    memoryLimitMb: 64,
+    estimatedSolveMinutes: 5,
+    status: "published",
+  },
+  {
+    title: "Nowhere to Return: Build User",
+    slug: "nowhere-to-return-build-user",
+    description: `The profile page shows a blank card. No crash, no error — the function just quietly hands back nothing.
+
+\`buildUser(name)\` should return { name, role: "debugger" }. But return followed by a line break ends the statement early, and the object below becomes dead code.
+
+Rejoin the return with its value.`,
+    kind: "logic-error",
+    language: "javascript",
+    difficulty: "easy",
+    category: "newbies",
+    tags: ["asi", "return", "objects"],
+    starterFiles: [
+      {
+        path: "user.js",
+        content: `// Builds a profile object for a new debugger.
+export function buildUser(name) {
+  return
+  {
+    name: name,
+    role: "debugger",
+  };
+}
+`,
+      },
+    ],
+    entryFile: "user.js",
+    entryFunction: "buildUser",
+    visibleTests: [
+      { name: "builds ada", input: ["ada"], expected: { name: "ada", role: "debugger" } },
+    ],
+    hiddenTests: [
+      { name: "builds grace", input: ["grace"], expected: { name: "grace", role: "debugger" } },
+      { name: "empty name still builds", input: [""], expected: { name: "", role: "debugger" } },
+    ],
+    constraints: "name is a string.",
+    hints: [
+      "JavaScript inserts semicolons where it thinks statements end. What did `return` + newline become?",
+      "The opening brace must share the return's line.",
+    ],
+    timeLimitMs: 2000,
+    memoryLimitMb: 64,
+    estimatedSolveMinutes: 8,
     status: "published",
   },
 ];

@@ -248,6 +248,7 @@ if (resetToken) {
 const logout = await post("/auth/logout", undefined, login.cookie);
 check("logout succeeds", logout.status === 200, `got ${logout.status}`);
 
+
 // ── Challenge catalog (PRD §7 / §20) ──
 const catalog = await get("/challenges");
 check(
@@ -261,7 +262,7 @@ check(
 );
 
 const easy = await get("/challenges?difficulty=easy");
-check("filter by difficulty", easy.status === 200 && easy.json?.total === 2, `got ${easy.status} total=${easy.json?.total}`);
+check("filter by difficulty", easy.status === 200 && easy.json?.total === 6, `got ${easy.status} total=${easy.json?.total}`);
 
 const backend = await get("/challenges?category=backend");
 check("filter by category", backend.status === 200 && backend.json?.total === 2, `got ${backend.status} total=${backend.json?.total}`);
@@ -274,7 +275,10 @@ check(
 );
 
 const py = await get("/challenges?language=Python");
-check("empty filter set", py.status === 200 && py.json?.total === 0 && Array.isArray(py.json?.items), `got ${py.status}`);
+check("filter by language", py.status === 200 && py.json?.total === 2, `got ${py.status} total=${py.json?.total}`);
+
+const newbies = await get("/challenges?category=newbies");
+check("newbies category", newbies.status === 200 && newbies.json?.total === 4, `got ${newbies.status} total=${newbies.json?.total}`);
 
 const sorted = await get("/challenges?sort=newest");
 check("sort newest", sorted.status === 200 && sorted.json?.items?.length > 0, `got ${sorted.status}`);
@@ -336,6 +340,8 @@ const draft = await post(
     language: "javascript",
     difficulty: "easy",
     category: "general",
+    entryFile: "a.js",
+    entryFunction: "a",
     starterFiles: [{ path: "a.js", content: "export const a = 1;\n" }],
     visibleTests: [{ name: "works", input: [[]], expected: [] }],
   },
@@ -373,6 +379,119 @@ const deleted = await fetch(`${BASE}/admin/challenges/${draftId}`, {
   headers: { Cookie: GodCookie ?? "" },
 }).then((r) => r.status);
 check("admin delete", deleted === 200, `got ${deleted}`);
+
+// ── Visible-test execution (queue + workers) ──
+// NOTE: requires a worker process (bun workers/runner.js) alongside the API.
+const anonRun = await post("/challenges/off-by-one-cart-total/run", {
+  files: [{ path: "cart.js", content: "export function cartTotal(){return 0;}\n" }],
+});
+check("run without session → 401", anonRun.status === 401, `got ${anonRun.status}`);
+
+const runAuth = await post("/auth/login", { email: EMAIL, password: NEW_PASS });
+const runCookie = runAuth.cookie;
+
+const badFiles = await post(
+  "/challenges/off-by-one-cart-total/run",
+  { files: [{ path: "evil.js", content: "x" }] },
+  runCookie
+);
+check("run unknown file → 422", badFiles.status === 422, `got ${badFiles.status}`);
+
+async function waitRun(id, cookie, timeoutMs = 30000) {
+  const start = Date.now();
+  for (;;) {
+    const r = await get(`/runs/${id}`, cookie);
+    const st = r.json?.run?.status;
+    if (st && st !== "queued" && st !== "running") return r.json.run;
+    if (Date.now() - start > timeoutMs) return { status: "POLL-TIMEOUT" };
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+const cartDetail = await get("/challenges/off-by-one-cart-total");
+const cartStarter = cartDetail.json?.challenge?.starterFiles?.[0]?.content ?? "";
+
+const brokenRun = await post(
+  "/challenges/off-by-one-cart-total/run",
+  { files: [{ path: "cart.js", content: cartStarter }] },
+  runCookie
+);
+check("run enqueues (202)", brokenRun.status === 202 && !!brokenRun.json?.runId, `got ${brokenRun.status}`);
+const broken = brokenRun.json?.runId ? await waitRun(brokenRun.json.runId, runCookie) : null;
+check(
+  "broken code fails visible tests (0/2)",
+  broken?.status === "failed" && broken?.testsPassed === 0 && broken?.testsTotal === 2,
+  `got ${broken?.status} ${broken?.testsPassed}/${broken?.testsTotal}`
+);
+
+const fixedCode = `export function cartTotal(prices) {
+  let total = 0;
+  for (let i = 0; i < prices.length; i++) total += prices[i];
+  return total;
+}
+`;
+const fixedRun = await post(
+  "/challenges/off-by-one-cart-total/run",
+  { files: [{ path: "cart.js", content: fixedCode }] },
+  runCookie
+);
+const fixed = fixedRun.json?.runId ? await waitRun(fixedRun.json.runId, runCookie) : null;
+check(
+  "fixed code passes (2/2)",
+  fixed?.status === "passed" && fixed?.testsPassed === 2,
+  `got ${fixed?.status} ${fixed?.testsPassed}/${fixed?.testsTotal}`
+);
+
+const loopRun = await post(
+  "/challenges/off-by-one-cart-total/run",
+  { files: [{ path: "cart.js", content: "export function cartTotal(){ while(true){} }\n" }] },
+  runCookie
+);
+const looped = loopRun.json?.runId ? await waitRun(loopRun.json.runId, runCookie, 15000) : null;
+check("infinite loop → timeout", looped?.status === "timeout", `got ${looped?.status}`);
+
+const syntaxRun = await post(
+  "/challenges/off-by-one-cart-total/run",
+  { files: [{ path: "cart.js", content: "export function( {\n" }] },
+  runCookie
+);
+const syntaxed = syntaxRun.json?.runId ? await waitRun(syntaxRun.json.runId, runCookie) : null;
+check("syntax error → runtime-error", syntaxed?.status === "runtime-error", `got ${syntaxed?.status}`);
+
+const pyDetail = await get("/challenges/watch-your-step-greet");
+const pyStarter = pyDetail.json?.challenge?.starterFiles?.[0]?.content ?? "";
+const pyRun = await post(
+  "/challenges/watch-your-step-greet/run",
+  { files: [{ path: "greet.py", content: pyStarter }] },
+  runCookie
+);
+const pyRes = pyRun.json?.runId ? await waitRun(pyRun.json.runId, runCookie) : null;
+check(
+  "Python IndentationError → runtime-error",
+  pyRes?.status === "runtime-error" && /indent/i.test(pyRes?.error ?? ""),
+  `got ${pyRes?.status}`
+);
+
+const pyFixed = await post(
+  "/challenges/watch-your-step-greet/run",
+  { files: [{ path: "greet.py", content: 'def greet(name):\n    return "Hello, " + name + "!"\n' }] },
+  runCookie
+);
+const pyFixedRes = pyFixed.json?.runId ? await waitRun(pyFixed.json.runId, runCookie) : null;
+check(
+  "fixed Python passes (1/1)",
+  pyFixedRes?.status === "passed" && pyFixedRes?.testsPassed === 1,
+  `got ${pyFixedRes?.status}`
+);
+
+const stranger = await get(`/runs/${fixedRun.json?.runId}`, GodCookie);
+check("admin can read any run", stranger.status === 200, `got ${stranger.status}`);
+// Fresh plain user (non-owner, non-admin) must not see the run at all.
+const plainEmail = `plain_${TAG}@gmail.com`;
+await post("/auth/register", { email: plainEmail, password: PASS, username: `p_${TAG}`.slice(0, 20) });
+const plainLogin = await post("/auth/login", { email: plainEmail, password: PASS });
+const snooped = await get(`/runs/${fixedRun.json?.runId}`, plainLogin.cookie);
+check("non-owner cannot read run (404)", snooped.status === 404, `got ${snooped.status}`);
 
 await mongo.close();
 console.log(failures === 0 ? "\nSMOKE PASS" : `\nSMOKE FAIL (${failures})`);

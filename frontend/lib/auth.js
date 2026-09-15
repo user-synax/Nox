@@ -145,7 +145,14 @@ export const auth = {
   /** Public profile — no session needed. */
   publicProfile: (username) =>
     request(`/users/${encodeURIComponent(username)}`),
-  /** Challenge catalog — filters: q, difficulty, language, category, tag, sort, page, limit. */
+  /** Queue a visible-test run → 202 { runId }. files: [{ path, content }]. */
+  runTests: (ref, files) =>
+    request(`/challenges/${encodeURIComponent(ref)}/run`, {
+      method: "POST",
+      body: { files },
+    }),
+  /** Poll a run — owner or admin only. */
+  getRun: (runId) => request(`/runs/${encodeURIComponent(runId)}`),  /** Challenge catalog — filters: q, difficulty, language, category, tag, sort, page, limit. */
   listChallenges: (params = {}) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {
@@ -167,6 +174,7 @@ export const LANGUAGES = [
 
 /** Challenge categories as onboarding interests (PRD §7.3). */
 export const INTERESTS = [
+  { slug: "newbies", label: "Newbies" },
   { slug: "general", label: "General Debugging" },
   { slug: "algorithms", label: "Algorithms / Logic" },
   { slug: "frontend", label: "Frontend" },

@@ -54,6 +54,14 @@ export async function connectDB(uri) {
     .collection("challenges")
     .createIndex({ status: 1, solveCount: -1 }, { name: "challenges_status_popular" });
 
+  // Execution queue (workers/queue.js): claim order + owner history.
+  await db
+    .collection("runs")
+    .createIndex({ status: 1, createdAt: 1 }, { name: "runs_status_created" });
+  await db
+    .collection("runs")
+    .createIndex({ userId: 1, createdAt: -1 }, { name: "runs_user_created" });
+
   // Better Auth session + verification collections: TTL on expiry so
   // stale rows disappear even if a worker never cleans them.
   // (Collections are created lazily — createIndex creates them.)

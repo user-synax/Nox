@@ -7,6 +7,10 @@
   "scripts": {
     "dev": "bun --watch src/index.js",
     "start": "bun src/index.js",
+    "worker": "bun workers/runner.js",
+    "worker:dev": "bun --watch workers/runner.js",
+    "seed": "bun scripts/seed-challenges.js",
+    "make-admin": "bun scripts/make-admin.js",
     "smoke": "bun scripts/smoke.js"
   },
   "dependencies": {
