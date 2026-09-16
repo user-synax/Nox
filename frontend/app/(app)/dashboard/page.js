@@ -2,7 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, ChevronRight, Flame, History, Lock } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  Flame,
+  History,
+  Lock,
+  Trophy,
+  Zap,
+} from "lucide-react";
 import { useAppSession } from "../../../components/SessionScope";
 import { StatNumber } from "../../../components/Stat";
 import {
@@ -25,16 +35,33 @@ function greeting() {
   return "Good evening";
 }
 
-function StatCard({ label, value, sub, foot }) {
+function timeAgo(iso) {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "";
+  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function StatCard({ icon: Icon, label, value, meta, foot }) {
   return (
     <div className="rounded-xl bg-surface-1 px-4 py-4">
+      <div className="flex items-center gap-1.5 text-ink-muted">
+        <Icon size={14} aria-hidden="true" className="shrink-0" />
+        <p className="text-[11px] font-medium tracking-[0.08em] uppercase">{label}</p>
+      </div>
       <StatNumber
         value={value}
-        className="block text-[26px] leading-none font-medium tracking-[-0.5px] text-ink"
+        className="mt-2.5 block text-[28px] leading-none font-medium tracking-[-0.5px] text-ink"
       />
-      <p className="mt-2 text-[13px] font-medium tracking-[-0.13px] text-ink">{label}</p>
-      {sub ? <p className="mt-0.5 text-[12px] text-ink-muted">{sub}</p> : null}
-      {foot ? <div className="mt-2">{foot}</div> : null}
+      {meta ? <p className="mt-1.5 text-[12px] text-ink-muted">{meta}</p> : null}
+      {foot ? <div className="mt-2.5">{foot}</div> : null}
     </div>
   );
 }
@@ -45,6 +72,8 @@ export default function DashboardPage() {
   const [recent, setRecent] = useState([]);
   const [daily, setDaily] = useState(null);
   const [dailyState, setDailyState] = useState("loading");
+  const [activity, setActivity] = useState([]);
+  const [activityState, setActivityState] = useState("loading");
   const user = session?.user;
   const stats = session?.stats;
 
@@ -59,6 +88,28 @@ export default function DashboardPage() {
     getRecent(4).then((rows) => {
       if (alive) setRecent(rows);
     });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Recent accepted solves — own submission history, newest first.
+  useEffect(() => {
+    let alive = true;
+    auth
+      .mySubmissions(1, 10)
+      .then((data) => {
+        if (!alive) return;
+        const solves = (data?.items ?? [])
+          .filter((s) => s?.status === "accepted" && s?.challengeSlug)
+          .slice(0, 5);
+        setActivity(solves);
+        setActivityState("ready");
+      })
+      .catch(() => {
+        if (!alive) return;
+        setActivityState("error");
+      });
     return () => {
       alive = false;
     };
@@ -142,15 +193,40 @@ export default function DashboardPage() {
 
       {/* Stats */}
       <div className="mt-8 grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <StatCard label="Rating" value={rating} sub={`Rank ${rankFor(rating)}`} />
         <StatCard
+          icon={Trophy}
+          label="Rating"
+          value={rating}
+          meta={`Rank ${rankFor(rating)}`}
+        />
+        <StatCard
+          icon={Zap}
           label="XP"
           value={xp}
-          sub={`Level ${stats?.level ?? 1}`}
+          meta={`Level ${stats?.level ?? 1}`}
           foot={<LevelProgress xp={xp} />}
         />
-        <StatCard label="Solved" value={stats?.solvedCount ?? 0} />
-        <StatCard label="Day streak" value={streak} />
+        <StatCard
+          icon={CheckCircle2}
+          label="Solved"
+          value={stats?.solvedCount ?? 0}
+          meta={
+            (stats?.submissionCount ?? stats?.attemptCount ?? 0) > 0 &&
+            stats?.successRate != null
+              ? `${Math.round(stats.successRate * 100)}% success`
+              : "Accept your first fix"
+          }
+        />
+        <StatCard
+          icon={Flame}
+          label="Day streak"
+          value={streak}
+          meta={
+            (stats?.longestStreak ?? 0) > 0
+              ? `Best ${stats.longestStreak} day${stats.longestStreak === 1 ? "" : "s"}`
+              : "Solve daily to start one"
+          }
+        />
       </div>
 
       {/* Main column + leaderboard rail */}
@@ -355,9 +431,77 @@ export default function DashboardPage() {
         <h2 className="text-[15px] font-medium tracking-[-0.15px] text-ink">
           Recent activity
         </h2>
-        <p className="mt-2 text-[14px] leading-[1.45] text-ink-muted">
-          No solves yet — your debugging history will live here once challenges go live.
-        </p>
+        {activityState === "loading" ? (
+          <div className="mt-3 animate-pulse" aria-label="Loading recent activity">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3 px-1 py-2.5">
+                <div className="h-6 w-6 shrink-0 rounded-full bg-surface-2" />
+                <div className="min-w-0 flex-1">
+                  <div className="h-3.5 w-2/3 rounded bg-surface-2" />
+                  <div className="mt-1.5 h-3 w-1/3 rounded bg-surface-2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : activityState === "error" ? (
+          <p className="mt-2 text-[14px] leading-[1.45] text-ink-muted">
+            Couldn&apos;t load activity right now.
+          </p>
+        ) : activity.length === 0 ? (
+          <div className="mt-2">
+            <p className="text-[14px] leading-[1.45] text-ink-muted">
+              No solves yet — accept a challenge and it will show up here.
+            </p>
+            <Link
+              href="/challenges"
+              className={`Nox-focus group mt-1 inline-flex items-center gap-1 text-[14px] font-medium text-accent-blue no-underline hover:underline`}
+            >
+              Browse challenges
+              <ArrowRight
+                size={14}
+                aria-hidden="true"
+                className="transition-transform duration-[var(--duration-fast)] group-hover:translate-x-0.5"
+              />
+            </Link>
+          </div>
+        ) : (
+          <ul className="mt-1 flex flex-col">
+            {activity.map((s) => (
+              <li key={s.id}>
+                <Link
+                  href={`/challenges/${s.challengeSlug}`}
+                  className={`Nox-focus group flex items-center gap-3 rounded-md px-1 py-2.5 no-underline hover:bg-surface-2 ${HOVER}`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success"
+                  >
+                    <Check size={13} strokeWidth={3} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium text-ink">
+                      {s.challengeTitle ?? s.challengeSlug}
+                    </span>
+                    <span className="Nox-mono block text-[12px] text-ink-muted">
+                      {timeAgo(s.completedAt ?? s.createdAt)}
+                      {` · +${s.xpAwarded ?? 0} XP · +${s.ratingDelta ?? 0}`}
+                    </span>
+                  </span>
+                  {s.score != null ? (
+                    <span className="Nox-mono shrink-0 text-[13px] text-ink-muted">
+                      {s.score}
+                    </span>
+                  ) : null}
+                  <ChevronRight
+                    size={15}
+                    aria-hidden="true"
+                    className="shrink-0 text-ink-muted transition-transform duration-[var(--duration-fast)] group-hover:translate-x-0.5 group-hover:text-ink"
+                  />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
         </div>
 
