@@ -15,7 +15,29 @@ const envSchema = z.object({
     .string()
     .min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
   BETTER_AUTH_URL: z.string().url().default("http://localhost:4000"),
-  FRONTEND_URL: z.string().url().default("http://localhost:3000"),
+  // Comma-separated to allow both custom domain + Vercel preview in one var:
+  // "https://nox.synax.me,https://nox.vercel.app"
+  FRONTEND_URL: z
+    .string()
+    .trim()
+    .min(1, "FRONTEND_URL is required")
+    .default("http://localhost:3000")
+    .refine(
+      (v) =>
+        v
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .every((s) => {
+            try {
+              new URL(s.replace(/\/+$/, ""));
+              return true;
+            } catch {
+              return false;
+            }
+          }),
+      { message: "FRONTEND_URL must be URL(s) comma-separated" }
+    ),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   // Outbound email (verification + password reset). Optional in dev
@@ -67,6 +89,31 @@ if (parsed.data.NODE_ENV === "production" && !parsed.data.RESEND_API_KEY) {
     );
     process.exit(1);
   }
+}
+
+// Normalize FRONTEND_URL: keep canonical (first) in env.FRONTEND_URL for
+// redirects/emails, and expose the full allow-list as env.FRONTEND_URLS
+// for CORS + OAuth safePath. Also always include the production custom
+// domain so a stale single-value Render var doesn't brick nox.synax.me.
+{
+  const raw = String(parsed.data.FRONTEND_URL ?? "");
+  const list = raw
+    .split(",")
+    .map((s) => s.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+  // Hard fallback so production is never CORS-bricked if the var is stale.
+  const extra = ["https://nox.synax.me", "https://www.nox.synax.me"];
+  for (const u of extra) if (!list.includes(u)) list.push(u);
+  // Local dev origins (harmless in prod, needed when NODE_ENV is overridden).
+  if (parsed.data.NODE_ENV !== "production") {
+    for (const u of ["http://localhost:3000", "http://127.0.0.1:3000"]) {
+      if (!list.includes(u)) list.push(u);
+    }
+  }
+  parsed.data.FRONTEND_URL = list[0];
+  parsed.data.FRONTEND_URLS = list;
+  // Trim trailing slash on the API URL so Google redirect_uri never double-slashes.
+  parsed.data.BETTER_AUTH_URL = String(parsed.data.BETTER_AUTH_URL ?? "").replace(/\/+$/, "");
 }
 
 export const env = parsed.data;

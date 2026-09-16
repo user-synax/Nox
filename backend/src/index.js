@@ -42,15 +42,31 @@ app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
 app.use(helmet());
-app.use(
-  cors({
-    // FRONTEND_URL must match the browser's Origin header EXACTLY —
-    // a trailing slash in the env var (https://app/ vs https://app)
-    // silently fails CORS and the browser blocks the Set-Cookie.
-    origin: [String(env.FRONTEND_URL ?? "").replace(/\/+$/, "")],
-    credentials: true,
-  })
-);
+{
+  // FRONTEND_URL may be comma-separated; env.FRONTEND_URLS is the full
+  // allow-list (always includes https://nox.synax.me so a stale Render var
+  // can't CORS-brick production). Must match Origin header EXACTLY or the
+  // browser strips Set-Cookie and every fetch is 401/CORS.
+  const allowed = new Set(
+    (env.FRONTEND_URLS ?? [env.FRONTEND_URL]).map((s) => String(s).replace(/\/+$/, ""))
+  );
+  console.log(`[api] CORS allowed origins: ${[...allowed].join(", ")}`);
+  app.use(
+    cors({
+      origin(origin, cb) {
+        // No Origin → same-origin / curl / health checks: allow.
+        if (!origin) return cb(null, true);
+        const norm = String(origin).replace(/\/+$/, "");
+        if (allowed.has(norm)) return cb(null, true);
+        console.warn(`[cors] blocked origin ${origin} (allowed: ${[...allowed].join(", ")})`);
+        return cb(null, false);
+      },
+      credentials: true,
+      methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+    })
+  );
+}
 
 app.use(express.json({ limit: "100kb" }));
 

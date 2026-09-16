@@ -35,18 +35,20 @@ function redirectUri() {
 
 /**
  * Relative frontend paths only — never open-redirect to another origin.
- * Also accepts an absolute URL whose origin matches FRONTEND_URL (the
- * frontend currently sends `${location.origin}/dashboard`) and extracts
- * its path, so deploys keep working even if the caller passes full URLs.
+ * Also accepts an absolute URL whose origin is in FRONTEND_URLS (the
+ * frontend may send `${location.origin}/dashboard`) and extracts its
+ * path, so deploys keep working even if the caller passes full URLs.
  */
 function safePath(p, fallback) {
   if (typeof p === "string") {
     const trimmed = p.trim();
-    // Absolute URL on our own frontend origin → take its path+query.
+    // Absolute URL on any allowed frontend origin → take its path+query.
     try {
-      const frontendOrigin = String(env.FRONTEND_URL ?? "").replace(/\/+$/, "");
       const parsed = new URL(trimmed);
-      if (parsed.origin === frontendOrigin) {
+      const allowed = new Set(
+        (env.FRONTEND_URLS ?? [env.FRONTEND_URL]).map((s) => String(s).replace(/\/+$/, ""))
+      );
+      if (allowed.has(parsed.origin)) {
         const rel = `${parsed.pathname}${parsed.search}`;
         if (/^\/(?!\/)[^\s\\]*$/.test(rel)) return rel;
       }
