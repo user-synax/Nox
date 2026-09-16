@@ -157,11 +157,11 @@ export default function SignupPage() {
     setOauthError(null);
     setGoogleBusy(true);
     try {
-      const origin = window.location.origin;
+      // Relative paths only — see login page note.
       const { url } = await auth.googleAuthURL({
-        callbackURL: `${origin}/dashboard`,
-        newUserCallbackURL: `${origin}/onboarding`,
-        errorCallbackURL: `${origin}/signup`,
+        callbackURL: "/dashboard",
+        newUserCallbackURL: "/onboarding",
+        errorCallbackURL: "/signup",
       });
       if (url) {
         window.location.href = url;

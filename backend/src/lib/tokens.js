@@ -42,11 +42,13 @@ export async function issueToken(db, { userId, email, type, ttlMs }) {
 export async function consumeToken(db, { token, type }) {
   try {
     if (!token) return null;
-    const row = await db.collection("emailTokens").findOneAndUpdate(
+    const res = await db.collection("emailTokens").findOneAndUpdate(
       { tokenHash: hashToken(token), type, usedAt: null, expiresAt: { $gt: new Date() } },
       { $set: { usedAt: new Date() } },
       { returnDocument: "after" }
     );
+    // mongodb ≥v5 returns the doc directly; older returns { value }.
+    const row = res?.value !== undefined ? res.value : res;
     return row ?? null;
   } catch {
     return null;

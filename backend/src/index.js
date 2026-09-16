@@ -44,7 +44,10 @@ app.set("trust proxy", 1);
 app.use(helmet());
 app.use(
   cors({
-    origin: [env.FRONTEND_URL],
+    // FRONTEND_URL must match the browser's Origin header EXACTLY —
+    // a trailing slash in the env var (https://app/ vs https://app)
+    // silently fails CORS and the browser blocks the Set-Cookie.
+    origin: [String(env.FRONTEND_URL ?? "").replace(/\/+$/, "")],
     credentials: true,
   })
 );

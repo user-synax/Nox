@@ -3,40 +3,24 @@ import { NextResponse } from "next/server";
 /**
  * Auth gating at the edge.
  *
- * The session cookie is httpOnly on the API origin, so middleware can only
- * check PRESENCE (Nox.*), not validity — pages re-verify via /users/me and
- * clear stale cookies with signOutAndLogin() (lib/auth.js), which is what
- * keeps an expired cookie from ping-ponging between /login and /dashboard.
+ * NOTE (cross-origin production): the session cookie (Nox.session) is
+ * httpOnly on the API origin (e.g. https://nox-aaqu.onrender.com), so
+ * this middleware — running on the FRONTEND origin — can never see it.
+ * req.cookies only contains frontend-origin cookies.
+ *
+ * That means presence checks here are always "logged out" in production,
+ * which used to bounce every verified user /onboarding → /login and make
+ * login look broken (API login 200s, then GET /users/me 401s because the
+ * old SameSite=Lax cookie was never sent cross-site either).
+ *
+ * So the edge does NOT gate protected routes. Client-side gates own auth:
+ * (app)/layout.js + /onboarding via useSession()/auth.meFull() (401 →
+ * signOutAndLogin → /login, loop-safe). This middleware stays as an
+ * explicit pass-through so the intent is documented where future
+ * same-origin fast-paths would go.
  */
 
-const SESSION_COOKIE_PREFIX = "Nox.";
-const AUTH_PAGES = new Set(["/", "/login", "/signup"]);
-const PROTECTED_PREFIXES = ["/dashboard", "/onboarding", "/settings", "/challenges", "/community"];
-
-function hasSession(req) {
-  return req.cookies
-    .getAll()
-    .some((c) => c.name.startsWith(SESSION_COOKIE_PREFIX));
-}
-
-function isProtected(pathname) {
-  return PROTECTED_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`)
-  );
-}
-
-export function middleware(req) {
-  const { pathname } = req.nextUrl;
-  const loggedIn = hasSession(req);
-
-  // Logged-in users never see landing / auth pages.
-  if (loggedIn && AUTH_PAGES.has(pathname)) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
-  // Logged-out users never enter the app shell.
-  if (!loggedIn && isProtected(pathname)) {
-    return NextResponse.redirect(new URL("/login", req.url));
-  }
+export function middleware() {
   return NextResponse.next();
 }
 

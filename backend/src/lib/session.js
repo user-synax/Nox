@@ -20,6 +20,21 @@ const REFRESH_AFTER_MS = 24 * 60 * 60 * 1000;
 
 const secureCookies = () => env.NODE_ENV === "production";
 
+/**
+ * SameSite policy — the API and the frontend live on different origins in
+ * production (Render API + Vercel app), so the session cookie must be sent
+ * on cross-site fetch() calls (credentials: "include").
+ *
+ *   - production → SameSite=None; Secure (cross-site fetch sends it)
+ *   - dev        → SameSite=Lax (localhost:3000 ↔ localhost:4000 are
+ *                  same-site, so Lax works and keeps dev simple)
+ *
+ * SameSite=Lax in production is the classic "login 200s but /users/me
+ * 401s" bug: the browser stores Set-Cookie but never sends it back on
+ * cross-site fetch, and the user row still gets created in MongoDB.
+ */
+const sameSite = () => (env.NODE_ENV === "production" ? "None" : "Lax");
+
 export function parseCookies(req) {
   const out = {};
   const header = req?.headers?.cookie;
@@ -44,16 +59,18 @@ export function hashToken(token) {
 }
 
 export function setSessionCookie(res, token) {
+  // Clear must mirror these attributes exactly or the browser keeps the
+  // old cookie (see clearSessionCookie below).
   res.append(
     "Set-Cookie",
-    `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}${secureCookies() ? "; Secure" : ""}`
+    `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=${sameSite()}; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}${secureCookies() ? "; Secure" : ""}`
   );
 }
 
 export function clearSessionCookie(res) {
   res.append(
     "Set-Cookie",
-    `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureCookies() ? "; Secure" : ""}`
+    `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=${sameSite()}; Max-Age=0${secureCookies() ? "; Secure" : ""}`
   );
 }
 

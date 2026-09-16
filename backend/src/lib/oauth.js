@@ -25,12 +25,36 @@ const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo";
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
 function redirectUri() {
-  return `${env.BETTER_AUTH_URL}/api/auth/callback/google`;
+  // BETTER_AUTH_URL must have no trailing slash or Google sees
+  // "https://host//api/..." and the token exchange 401s with
+  // redirect_uri_mismatch / invalid_grant. Trim defensively — the
+  // Google Console entry must match this EXACTLY:
+  //   {BETTER_AUTH_URL}/api/auth/callback/google
+  return `${String(env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "")}/api/auth/callback/google`;
 }
 
-/** Relative frontend paths only — never open-redirect to another origin. */
+/**
+ * Relative frontend paths only — never open-redirect to another origin.
+ * Also accepts an absolute URL whose origin matches FRONTEND_URL (the
+ * frontend currently sends `${location.origin}/dashboard`) and extracts
+ * its path, so deploys keep working even if the caller passes full URLs.
+ */
 function safePath(p, fallback) {
-  if (typeof p === "string" && /^\/(?!\/)[^\s\\]*$/.test(p)) return p;
+  if (typeof p === "string") {
+    const trimmed = p.trim();
+    // Absolute URL on our own frontend origin → take its path+query.
+    try {
+      const frontendOrigin = String(env.FRONTEND_URL ?? "").replace(/\/+$/, "");
+      const parsed = new URL(trimmed);
+      if (parsed.origin === frontendOrigin) {
+        const rel = `${parsed.pathname}${parsed.search}`;
+        if (/^\/(?!\/)[^\s\\]*$/.test(rel)) return rel;
+      }
+    } catch {
+      /* not absolute — fall through to the relative check */
+    }
+    if (/^\/(?!\/)[^\s\\]*$/.test(trimmed)) return trimmed;
+  }
   return fallback;
 }
 
@@ -91,9 +115,11 @@ export async function googleCallback(db, req, res) {
     const q = req.query ?? {};
     // Load + burn the state first: every callback attempt is single-use,
     // which also bounds replay of intercepted codes.
-    const row = q.state
+    // mongodb driver ≥v5 returns the doc directly; older returns { value }.
+    const deleted = q.state
       ? await db.collection("oauthStates").findOneAndDelete({ state: String(q.state) })
       : null;
+    const row = deleted?.value !== undefined ? deleted.value : deleted;
     const storedCb = row?.errorCallbackURL ?? "/login";
     const failWith = (code, detail) => errorRedirect(res, storedCb, code, detail);
     if (q.error) {
@@ -122,7 +148,15 @@ export async function googleCallback(db, req, res) {
     });
     const tokens = await tokenRes.json().catch(() => null);
     if (!tokenRes.ok || !tokens?.access_token) {
-      console.error("[oauth] token exchange failed:", tokenRes.status);
+      // Google answers invalid_client (bad id/secret) with 401 and
+      // redirect_uri_mismatch / invalid_grant with 400 — the status alone
+      // can't tell them apart, so log the body (no secrets in it).
+      console.error(
+        "[oauth] token exchange failed:",
+        tokenRes.status,
+        JSON.stringify(tokens)?.slice(0, 300),
+        `redirect_uri=${redirectUri()}`
+      );
       return failWith("authentication_failed");
     }
 

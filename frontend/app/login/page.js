@@ -148,12 +148,14 @@ export default function LoginPage() {
     setOauthError(null);
     setGoogleBusy(true);
     try {
-      const origin = window.location.origin;
       const hint = email.value.trim();
+      // Backend contract is relative frontend paths (it prefixes
+      // FRONTEND_URL itself + rejects open-redirects). Never send
+      // absolute URLs here.
       const { url } = await auth.googleAuthURL({
-        callbackURL: `${origin}/dashboard`,
-        newUserCallbackURL: `${origin}/onboarding`,
-        errorCallbackURL: `${origin}/login`,
+        callbackURL: "/dashboard",
+        newUserCallbackURL: "/onboarding",
+        errorCallbackURL: "/login",
         ...(EMAIL_RE.test(hint) ? { loginHint: hint } : {}),
       });
       if (url) {

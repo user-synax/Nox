@@ -102,6 +102,8 @@ export const auth = {
    * (Google), which returns to `callbackURL` for returning users,
    * `newUserCallbackURL` for fresh signups, or `errorCallbackURL` with
    * ?error= on failure. Full-page redirect — no popup to block.
+   * Paths are relative frontend paths ("/dashboard"); the API prefixes
+   * FRONTEND_URL itself.
    */
   googleAuthURL: ({ callbackURL, newUserCallbackURL, errorCallbackURL, loginHint } = {}) =>
     request("/api/auth/sign-in/social", {
