@@ -55,7 +55,7 @@ export function createSubmissionRoutes(db) {
     submitLimit(),
     validate(runRequestSchema),
     async (req, res) => {
-      const me = await requireUserId(auth, req, res);
+      const me = await requireUserId(db, req, res);
       if (!me) return;
       try {
         const challenge = await findPublishedChallenge(db, req.params.id);
@@ -133,7 +133,7 @@ export function createSubmissionRoutes(db) {
   );
 
   router.get("/submissions/:id", async (req, res) => {
-    const me = await requireUserId(auth, req, res);
+    const me = await requireUserId(db, req, res);
     if (!me) return;
     try {
       let doc = null;
@@ -155,7 +155,7 @@ export function createSubmissionRoutes(db) {
   });
 
   router.get("/users/me/submissions", async (req, res) => {
-    const me = await requireUserId(auth, req, res);
+    const me = await requireUserId(db, req, res);
     if (!me) return;
     try {
       const page = Math.min(100, Math.max(1, Number(req.query.page) || 1));

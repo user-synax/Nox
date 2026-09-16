@@ -41,7 +41,7 @@ export function createRunRoutes(db) {
     strictAuthLimit(),
     validate(runRequestSchema),
     async (req, res) => {
-      const me = await requireUserId(auth, req, res);
+      const me = await requireUserId(db, req, res);
       if (!me) return;
       try {
         // Accept ObjectId or slug in :id.
@@ -103,7 +103,7 @@ export function createRunRoutes(db) {
   );
 
   router.get("/runs/:id", async (req, res) => {
-    const me = await requireUserId(auth, req, res);
+    const me = await requireUserId(db, req, res);
     if (!me) return;
     try {
       const run = await getRun(db, req.params.id);
