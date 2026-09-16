@@ -236,6 +236,17 @@ export default function SignupPage() {
   const innerInput =
     "w-full bg-transparent outline-none placeholder:text-ink-muted focus-visible:shadow-none";
 
+  if (gateLoading) {
+    return <div className="min-h-screen bg-canvas" aria-hidden="true" />;
+  }
+  if (gateSession?.user) {
+    return (
+      <div className="min-h-screen bg-canvas grid place-items-center">
+        <p className="text-[14px] text-ink-muted">Redirecting to dashboard…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-canvas font-body text-ink">
       {/* Centered auth column — no nav chrome on auth pages */}

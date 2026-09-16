@@ -385,6 +385,17 @@ export default function Home() {
   const demoCode = demoTab === "broken" ? BROKEN_CODE : FIXED_CODE;
   const demoPassCount = demoTests.filter((t) => t.pass).length;
 
+  if (sessionLoading) {
+    return <div className="min-h-screen bg-canvas" aria-hidden="true" />;
+  }
+  if (session?.user) {
+    return (
+      <div className="min-h-screen bg-canvas grid place-items-center">
+        <p className="text-[14px] text-ink-muted">Redirecting to dashboard…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen overflow-x-clip bg-canvas font-body text-ink">
       {/* top-nav — sticky 56px bar on canvas, wordmark left, links center, pills right */}

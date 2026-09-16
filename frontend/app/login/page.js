@@ -99,11 +99,11 @@ export default function LoginPage() {
   const [googleBusy, setGoogleBusy] = useState(false);
   const busyTimer = useRef(null);
 
+  const router = useRouter();
   const email = useField(validateEmail);
   const password = useField(validatePassword);
   const [formError, setFormError] = useState(null);
   const { session: gateSession, loading: gateLoading } = useSession();
-
   // Already signed in → don't show auth forms (middleware can't see API cookie cross-origin).
   useEffect(() => {
     if (!gateLoading && gateSession?.user) router.replace("/dashboard");
@@ -112,7 +112,6 @@ export default function LoginPage() {
   const [unverified, setUnverified] = useState(null);
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
-  const router = useRouter();
   const emailRef = useRef(null);
   const passwordRef = useRef(null);
 
@@ -244,6 +243,17 @@ export default function LoginPage() {
      focus/valid/error outlines via :focus-within. */
   const innerInput =
     "w-full bg-transparent outline-none placeholder:text-ink-muted focus-visible:shadow-none";
+
+  if (gateLoading) {
+    return <div className="min-h-screen bg-canvas" aria-hidden="true" />;
+  }
+  if (gateSession?.user) {
+    return (
+      <div className="min-h-screen bg-canvas grid place-items-center">
+        <p className="text-[14px] text-ink-muted">Redirecting to dashboard…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas font-body text-ink">
