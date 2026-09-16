@@ -11,6 +11,7 @@ import {
   emailDomainAllowed,
   emailDomainMessage,
 } from "../../lib/auth";
+import { useSession } from "../../lib/useSession";
 
 const HOVER =
   "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]";
@@ -109,6 +110,7 @@ export default function SignupPage() {
   const [googleBusy, setGoogleBusy] = useState(false);
   const busyTimer = useRef(null);
   const router = useRouter();
+  const { session: gateSession, loading: gateLoading } = useSession();
 
   const username = useField(validateUsername);
   const email = useField(validateEmail);
@@ -117,6 +119,11 @@ export default function SignupPage() {
   const usernameRef = useRef(null);
   const emailRef = useRef(null);
   const passwordRef = useRef(null);
+
+  // Already signed in → bounce to dashboard (middleware can't see API cookie).
+  useEffect(() => {
+    if (!gateLoading && gateSession?.user) router.replace("/dashboard");
+  }, [gateLoading, gateSession, router]);
 
   /* transitions-dev 07-panel-reveal.md — entrance, pure CSS state flip */
   useEffect(() => {

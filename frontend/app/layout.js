@@ -1,5 +1,6 @@
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
+import { PwaRegister } from "../components/PwaRegister";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,6 +21,26 @@ export const metadata = {
   title: "Nox — Debug code. Build skill. Prove it.",
   description:
     "Practice real-world debugging by fixing intentionally broken code, passing hidden tests, and building a developer profile that shows what you can actually debug.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Nox",
+  },
+  icons: {
+    icon: [
+      { url: "/nox-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/nox-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+};
+
+export const viewport = {
+  themeColor: "#090909",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({ children }) {
@@ -29,7 +50,13 @@ export default function RootLayout({ children }) {
       className={`dark ${geistSans.variable} ${geistMono.variable} ${inter.variable} h-full antialiased`}
       style={{ colorScheme: "dark" }}
     >
-      <body className="flex min-h-full flex-col bg-canvas font-body text-ink">{children}</body>
+      <head>
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+      </head>
+      <body className="flex min-h-full flex-col bg-canvas font-body text-ink">
+        <PwaRegister />
+        {children}
+      </body>
     </html>
   );
 }

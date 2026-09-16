@@ -245,6 +245,13 @@ export default function Home() {
   const router = useRouter();
   const { session, loading: sessionLoading } = useSession();
 
+  // Logged-in users never see the marketing landing — mirrors the old
+  // middleware which can't run cross-origin (Nox.session lives on the API
+  // origin). Client gate keeps / → /dashboard without a flash.
+  useEffect(() => {
+    if (!sessionLoading && session?.user) router.replace("/dashboard");
+  }, [sessionLoading, session, router]);
+
   /* transitions-dev 16-tabs-sliding.md orchestration — adapted selectors.
      Snaps without transition on first paint/resize (transition: none + reflow). */
   const movePill = useCallback((index, animate) => {

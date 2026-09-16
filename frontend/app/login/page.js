@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { auth, toFieldError, emailDomainAllowed, emailDomainMessage } from "../../lib/auth";
+import { useSession } from "../../lib/useSession";
 
 const HOVER =
   "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]";
@@ -101,6 +102,12 @@ export default function LoginPage() {
   const email = useField(validateEmail);
   const password = useField(validatePassword);
   const [formError, setFormError] = useState(null);
+  const { session: gateSession, loading: gateLoading } = useSession();
+
+  // Already signed in → don't show auth forms (middleware can't see API cookie cross-origin).
+  useEffect(() => {
+    if (!gateLoading && gateSession?.user) router.replace("/dashboard");
+  }, [gateLoading, gateSession, router]);
   // 403 EMAIL_NOT_VERIFIED lands here with a resend action.
   const [unverified, setUnverified] = useState(null);
   const [resending, setResending] = useState(false);
