@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, ChevronDown, FileCode2, FlaskConical, LayoutDashboard, LoaderCircle, RotateCcw, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Copy, FileCode2, FlaskConical, LayoutDashboard, LoaderCircle, RotateCcw, X } from "lucide-react";
 import { API_BASE, auth, rankFor, signOutAndLogin } from "../../../../lib/auth";
 import { StatNumber } from "../../../../components/Stat";
 import {
@@ -305,6 +305,203 @@ function VerdictCard({ result, preRating, challengeSlug, onDismiss }) {
   );
 }
 
+/**
+ * Accepted takeover — the celebration moment. Focused modal with restrained
+ * motion, dismissible via Esc / X / actions (no backdrop-click: losing the
+ * moment to a stray click would be cheap). Solve story first, share second.
+ * Rejected / timeout / error verdicts stay untouched in the rail.
+ */
+function AcceptedOverlay({ result, slug, title, difficulty, username, preRating, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const [attempts, setAttempts] = useState(null);
+  const [shown, setShown] = useState(false);
+  const closeRef = useRef(null);
+  const copyTimer = useRef(null);
+  const prevFocus = useRef(null);
+
+  useEffect(() => {
+    prevFocus.current = document.activeElement;
+    const raf = requestAnimationFrame(() => {
+      setShown(true);
+      closeRef.current?.focus();
+    });
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+      clearTimeout(copyTimer.current);
+      if (prevFocus.current && typeof prevFocus.current.focus === "function") {
+        prevFocus.current.focus();
+      }
+    };
+  }, [onClose]);
+
+  // Attempt count = own submits for this challenge. The accepted submit is
+  // the newest row, so the first page always tells the full story.
+  useEffect(() => {
+    let alive = true;
+    auth
+      .mySubmissions(1, 50)
+      .then((data) => {
+        if (!alive) return;
+        const n = (data?.items ?? []).filter((s) => s?.challengeSlug === slug).length;
+        if (n > 0) setAttempts(n);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [slug]);
+
+  const ratingDelta = result?.ratingDelta ?? 0;
+  const rankedUp =
+    preRating != null && rankFor(preRating) !== rankFor(preRating + ratingDelta);
+  const meta = [
+    attempts ? `Attempt ${attempts}` : null,
+    result?.testsTotal ? `${result.testsPassed}/${result.testsTotal} hidden tests` : null,
+    result?.executionTimeMs != null ? `${result.executionTimeMs} ms` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const shareText = () => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const lines = [
+      `I fixed "${title}" (${difficulty ?? "debugging"}) on Nox — ${result?.score ?? 0}/100 · +${result?.xpAwarded ?? 0} XP · +${ratingDelta} rating`,
+      `Try it: ${origin}/challenges/${slug}`,
+    ];
+    if (username) lines.push(`My solves: ${origin}/u/${username}`);
+    return lines.join("\n");
+  };
+
+  const onCopy = async () => {
+    const text = shareText();
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+      } catch {
+        /* clipboard unavailable — still confirm */
+      }
+    }
+    setCopied(true);
+    clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="presentation">
+      <div aria-hidden="true" className="absolute inset-0 bg-black/70" />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="accept-title"
+        className={`relative max-h-[90dvh] w-full max-w-[480px] overflow-y-auto rounded-2xl bg-surface-1 p-6 transition-all duration-200 ease-out sm:p-8 ${
+          shown ? "translate-y-0 scale-100 opacity-100" : "translate-y-3 scale-[0.98] opacity-0"
+        }`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <span
+            aria-hidden="true"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-success/15 text-success"
+          >
+            <Check size={20} strokeWidth={3} />
+          </span>
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={onClose}
+            aria-label="Close result"
+            className={`Nox-focus inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-ink-muted hover:bg-surface-2 hover:text-ink ${HOVER}`}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+        <p className="mt-4 text-[11px] font-medium tracking-[0.08em] text-success uppercase">
+          Accepted
+        </p>
+        <h2
+          id="accept-title"
+          className="Nox-display mt-1 text-[26px] leading-[1.15] font-medium tracking-[-0.5px] text-ink"
+        >
+          {title}
+        </h2>
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          <DifficultyBadge level={difficulty} />
+          {meta ? <span className="Nox-mono text-[12px] text-ink-muted">{meta}</span> : null}
+        </div>
+        <div className="mt-5 flex items-end justify-between gap-4 rounded-xl bg-canvas p-4">
+          <div>
+            <p className="text-[11px] font-medium tracking-[0.08em] text-ink-muted uppercase">
+              Score
+            </p>
+            <p className="mt-1 leading-none">
+              <StatNumber
+                value={result?.score ?? 0}
+                className="text-[40px] font-medium tracking-[-1px] text-ink"
+              />{" "}
+              <span className="Nox-mono text-[14px] text-ink-muted">/100</span>
+            </p>
+          </div>
+          <div className="Nox-mono flex shrink-0 flex-col items-end gap-1 text-[13px]">
+            <span className="text-success">+{result?.xpAwarded ?? 0} XP</span>
+            <span className={ratingDelta >= 0 ? "text-success" : "text-danger"}>
+              {`${ratingDelta >= 0 ? "+" : ""}${ratingDelta} rating`}
+            </span>
+          </div>
+        </div>
+        {rankedUp ? (
+          <p className="mt-3 text-[13px] font-medium text-accent-blue" role="status">
+            Rank up: {rankFor(preRating + ratingDelta)}!
+          </p>
+        ) : null}
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+          <Link
+            href={`/challenges/${slug}#solutions`}
+            className={`Nox-focus inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-pill bg-white px-5 text-[14px] font-medium text-black no-underline ${HOVER}`}
+          >
+            Share your fix
+            <ArrowRight size={15} aria-hidden="true" />
+          </Link>
+          <button
+            type="button"
+            onClick={onCopy}
+            className={`Nox-focus inline-flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-pill border-0 bg-surface-2 px-5 text-[14px] font-medium text-ink ${HOVER}`}
+          >
+            {copied ? (
+              <Check size={15} strokeWidth={3} aria-hidden="true" />
+            ) : (
+              <Copy size={15} aria-hidden="true" />
+            )}
+            {copied ? "Copied" : "Copy result"}
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className={`Nox-focus mt-1 inline-flex min-h-[40px] w-full cursor-pointer items-center justify-center rounded-pill border-0 bg-transparent px-5 text-[13px] font-medium text-ink-muted hover:text-ink ${HOVER}`}
+        >
+          Back to workspace
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function SolvePage({ params }) {
   const { slug } = use(params);
   const router = useRouter();
@@ -330,6 +527,9 @@ export default function SolvePage({ params }) {
   const [submitResult, setSubmitResult] = useState(null);
   const [submitError, setSubmitError] = useState(null);
   const [preRating, setPreRating] = useState(null);
+  // Accepted takeover — dismiss reveals the rail VerdictCard fallback.
+  const [showAccepted, setShowAccepted] = useState(false);
+  const closeAccepted = useCallback(() => setShowAccepted(false), []);
   // Virtual terminal: errors live here, never in the tests list.
   const [terminal, setTerminal] = useState(null);
   const [termOpen, setTermOpen] = useState(false);
@@ -599,6 +799,7 @@ export default function SolvePage({ params }) {
           setSubmitResult(sub);
           setSubmitPhase("done");
           showTerminal(sub);
+          if (sub.status === "accepted") setShowAccepted(true);
           return;
         }
         // Pending past 8s with no worker alive = the dev worker is down.
@@ -836,6 +1037,7 @@ export default function SolvePage({ params }) {
               onDismiss={() => {
                 setSubmitResult(null);
                 setSubmitPhase("idle");
+                setShowAccepted(false);
               }}
             />
           ) : null}
@@ -1008,6 +1210,17 @@ export default function SolvePage({ params }) {
           </div>
         </div>
       </div>
+      {showAccepted && submitResult?.status === "accepted" ? (
+        <AcceptedOverlay
+          result={submitResult}
+          slug={challenge.slug}
+          title={challenge.title}
+          difficulty={submitResult.difficulty ?? challenge.difficulty}
+          username={username}
+          preRating={preRating}
+          onClose={closeAccepted}
+        />
+      ) : null}
       </main>
     </div>
   );
