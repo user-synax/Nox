@@ -174,9 +174,10 @@ export function createAuth(db) {
                 message: `Use an email from: ${ALLOWED_EMAIL_DOMAINS.join(", ")}.`,
               });
             }
-            // OAuth profiles (Google) carry no username — derive a
-            // permanent, human-readable handle (usernames are immutable)
-            // instead of failing the signup.
+            // OAuth profiles (Google) carry no username — the provider's
+            // mapProfileToUser normally supplies a derived unique handle
+            // (required-field validation runs before this hook). This is
+            // the backstop for any path that arrives without one.
             const username =
               user.username ??
               (await uniqueUsername(
@@ -248,6 +249,34 @@ export function createAuth(db) {
             google: {
               clientId: env.GOOGLE_CLIENT_ID,
               clientSecret: env.GOOGLE_CLIENT_SECRET,
+              // Required-field bridge: Google profiles carry no username,
+              // and Better Auth validates required additionalFields BEFORE
+              // the user.create hook runs — without this, every Google
+              // signup dies with "username is required". Fresh signups get
+              // a derived unique handle here; returning users get {} so
+              // sign-in never rewrites their immutable username.
+              mapProfileToUser: async (profile) => {
+                try {
+                  const email = String(profile?.email ?? "").toLowerCase();
+                  if (!email) return {};
+                  const exists = await db
+                    .collection("user")
+                    .findOne({ email }, { projection: { _id: 1 } });
+                  if (exists) return {};
+                  return {
+                    username: await uniqueUsername(
+                      db,
+                      socialUsernameBase(profile?.name, email)
+                    ),
+                  };
+                } catch (err) {
+                  console.error(
+                    "[auth] google username mapping failed:",
+                    err?.message ?? err
+                  );
+                  return {};
+                }
+              },
             },
           },
         }
