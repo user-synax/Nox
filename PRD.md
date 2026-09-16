@@ -185,10 +185,10 @@ After a successful submission, the user can:
 
 - Email/password authentication.
 - Google OAuth (code-complete; enabled by setting `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, no code change needed).
-- Email verification (endpoints + `/verify-email` page exist; enforcement is currently OFF — signup signs straight in and verification/reset links are captured to a dev-only outbox until a real email provider is wired).
+- Email verification (ENFORCED since 2026-09-16: signup creates the account without a session; login is 403 until verified; pre-enforcement accounts grandfathered via `scripts/grandfather-verified.js`).
 - Session management (7-day DB sessions, daily refresh, 5-minute signed cookie cache).
 - Logout.
-- Password reset (same dev-outbox note as verification).
+- Password reset (emailed link; same provider as verification).
 - Basic account security controls (domain allowlist, per-IP rate limits, RBAC).
 
 ### Future
@@ -2047,6 +2047,7 @@ These items can be changed without rewriting the overall PRD.
 | Queue | MongoDB-backed `runs` queue (Redis/BullMQ dropped) |
 | Execution | Separate worker processes + temp dirs (containers deferred) |
 | Authentication | Mature session/auth library |
+| Outbound email | Resend (`RESEND_API_KEY`; dev-outbox fallback when unset, prod boot fails without it) |
 | Design | Dark-first, minimal developer tool |
 | Primary color | #4BA9E1 |
 | Typography | Geist + Geist Mono |

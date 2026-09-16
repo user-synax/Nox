@@ -94,6 +94,15 @@ export async function connectDB(uri) {
     .collection("ratingEvents")
     .createIndex({ createdAt: -1, category: 1 }, { name: "ratingEvents_created_cat" });
 
+  // Achievements (workers/achievements.js): one unlock per (user × key).
+  await db.collection("userAchievements").createIndex(
+    { userId: 1, key: 1 },
+    { unique: true, name: "userAchievements_user_key_unique" }
+  );
+  await db
+    .collection("userAchievements")
+    .createIndex({ userId: 1, unlockedAt: -1 }, { name: "userAchievements_user_unlocked" });
+
   // Solutions + comments + likes (PRD §19, solved-only reads).
   await db
     .collection("solutions")

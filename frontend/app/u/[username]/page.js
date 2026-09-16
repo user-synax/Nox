@@ -3,7 +3,22 @@
 import { use, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowUpRight, CalendarDays, Check, GitBranch, Globe } from "lucide-react";
+import {
+  ArrowUpRight,
+  Bug,
+  CalendarDays,
+  Check,
+  Crosshair,
+  Crown,
+  Flame,
+  GitBranch,
+  Globe,
+  Hash,
+  Languages,
+  Lock,
+  Medal,
+  Swords,
+} from "lucide-react";
 import { auth, rankFor } from "../../../lib/auth";
 import { Avatar } from "../../../components/Avatar";
 import { RankBadge } from "../../../components/Leaderboard";
@@ -50,6 +65,64 @@ function StatCell({ label, value }) {
   );
 }
 
+const ACHIEVEMENT_ICONS = {
+  "first-fix": Bug,
+  "clean-shot": Crosshair,
+  "giant-slayer": Swords,
+  "titan-slayer": Crown,
+  "week-of-fire": Flame,
+  polyglot: Languages,
+  "gold-standard": Medal,
+  "double-digits": Hash,
+};
+
+function AchievementsSection({ catalog, unlocked }) {
+  if (!catalog || catalog.length === 0) return null;
+  const byKey = new Map((unlocked ?? []).map((u) => [u.key, u.unlockedAt]));
+  return (
+    <section aria-label="Achievements" className="rounded-xl bg-surface-1 p-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-[13px] font-medium tracking-[-0.13px] text-ink-muted">
+          Achievements
+        </h2>
+        <span className="Nox-mono text-[12px] text-ink-muted">
+          {byKey.size}/{catalog.length}
+        </span>
+      </div>
+      <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {catalog.map((a) => {
+          const at = byKey.get(a.key);
+          const Icon = ACHIEVEMENT_ICONS[a.key] ?? Bug;
+          return (
+            <li
+              key={a.key}
+              title={at ? `Unlocked ${new Date(at).toLocaleDateString()}` : "Locked"}
+              className={`min-w-0 rounded-md px-3 py-3 ${at ? "bg-canvas" : "bg-canvas opacity-55"}`}
+            >
+              <span
+                aria-hidden="true"
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                  at ? "bg-success/15 text-success" : "bg-surface-2 text-ink-muted"
+                }`}
+              >
+                {at ? <Icon size={16} strokeWidth={2} /> : <Lock size={14} strokeWidth={2} />}
+              </span>
+              <p className={`mt-2 truncate text-[13px] font-medium ${at ? "text-ink" : "text-ink-muted"}`}>
+                {a.name}
+              </p>
+              <p className="Nox-mono mt-0.5 text-[11px] text-ink-muted">
+                {at
+                  ? new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+                  : `+${a.xp ?? 25} XP`}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export default function PublicProfilePage({ params }) {
   const { username } = use(params);
   const [data, setData] = useState(null);
@@ -58,6 +131,7 @@ export default function PublicProfilePage({ params }) {
   const [tab, setTab] = useState(0);
   const [solItems, setSolItems] = useState([]);
   const [solTotal, setSolTotal] = useState(0);
+  const [catalog, setCatalog] = useState([]);
   const [mounted, setMounted] = useState(false);
   const pillRef = useRef(null);
   const tabRefs = useRef([]);
@@ -68,7 +142,8 @@ export default function PublicProfilePage({ params }) {
       auth.publicProfile(username),
       auth.meFull().catch(() => null),
       auth.authorSolutions(username, 1, 20).catch(() => null),
-    ]).then(([pub, me, sols]) => {
+      auth.achievementsCatalog().catch(() => null),
+    ]).then(([pub, me, sols, cat]) => {
       if (!alive) return;
       if (pub.status === "fulfilled") {
         setData(pub.value);
@@ -80,6 +155,9 @@ export default function PublicProfilePage({ params }) {
       if (sols.status === "fulfilled" && sols.value) {
         setSolItems(sols.value.items ?? []);
         setSolTotal(sols.value.total ?? 0);
+      }
+      if (cat.status === "fulfilled" && cat.value) {
+        setCatalog(cat.value.achievements ?? []);
       }
     });
     return () => {
@@ -297,6 +375,7 @@ export default function PublicProfilePage({ params }) {
               <div className="mt-4">
                 {tab === 0 ? (
                   <div className="flex flex-col gap-4">
+                    <AchievementsSection catalog={catalog} unlocked={data.achievements} />
                     {(data.stats?.preferredLanguages?.length ?? 0) > 0 ? (
                       <section className="rounded-xl bg-surface-1 p-5">
                         <h2 className="text-[13px] font-medium tracking-[-0.13px] text-ink-muted">

@@ -346,12 +346,14 @@ export default function DashboardPage() {
         </section>
         ) : null}
 
-        {/* The one atmospheric card on this page (DESIGN.md: scarce by design). */}
+        {/* The one atmospheric card on this page — photo bg, not gradient. */}
         <section
           aria-label="Daily challenge"
-          className={`flex flex-col justify-between overflow-hidden rounded-xl bg-gradient-violet p-5 text-white ${showGettingStarted ? "lg:col-span-2" : ""}`}
+          style={{ backgroundImage: "url(/daily-card-bg.png)" }}
+          className={`relative flex flex-col justify-between overflow-hidden rounded-xl bg-cover bg-center p-5 text-white ${showGettingStarted ? "lg:col-span-2" : ""}`}
         >
-          <div>
+          <div aria-hidden="true" className="absolute inset-0 bg-black/40" />
+          <div className="relative">
             <p className="text-[11px] font-medium tracking-[0.08em] opacity-80">
               DAILY DEBUG{daily?.date ? ` · ${daily.date}` : ""}
             </p>
@@ -402,7 +404,7 @@ export default function DashboardPage() {
           {dailyState === "ready" && daily?.challenge ? (
             <Link
               href={`/challenges/${daily.challenge.slug}`}
-              className={`Nox-focus mt-6 inline-flex min-h-[44px] w-fit items-center gap-2 rounded-pill bg-white px-5 py-[10px] text-[14px] font-medium text-black no-underline ${HOVER} ${PRESS}`}
+              className={`Nox-focus relative mt-6 inline-flex min-h-[44px] w-fit items-center gap-2 rounded-pill bg-white px-5 py-[10px] text-[14px] font-medium text-black no-underline ${HOVER} ${PRESS}`}
             >
               {daily.challenge.solved ? "Review today's fix" : "Fix today's bug"}
               <ArrowRight size={15} aria-hidden="true" />
@@ -410,14 +412,14 @@ export default function DashboardPage() {
           ) : dailyState === "loading" ? (
             <span
               aria-hidden="true"
-              className="mt-6 inline-flex min-h-[44px] w-fit items-center gap-2 rounded-pill bg-white/15 px-5 py-[10px] text-[14px] font-medium opacity-70"
+              className="relative mt-6 inline-flex min-h-[44px] w-fit items-center gap-2 rounded-pill bg-white/15 px-5 py-[10px] text-[14px] font-medium opacity-70"
             >
               Finding today&apos;s bug…
             </span>
           ) : (
             <Link
               href="/challenges"
-              className={`Nox-focus mt-6 inline-flex min-h-[44px] w-fit items-center gap-2 rounded-pill bg-white px-5 py-[10px] text-[14px] font-medium text-black no-underline ${HOVER} ${PRESS}`}
+              className={`Nox-focus relative mt-6 inline-flex min-h-[44px] w-fit items-center gap-2 rounded-pill bg-white px-5 py-[10px] text-[14px] font-medium text-black no-underline ${HOVER} ${PRESS}`}
             >
               Browse challenges
               <ArrowRight size={15} aria-hidden="true" />

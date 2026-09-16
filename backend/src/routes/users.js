@@ -15,6 +15,7 @@ import {
   deleteAvatarFile,
 } from "../lib/appwrite.js";
 import { defaultProfileStats } from "../lib/stats.js";
+import { unlockedEntries } from "./achievements.js";
 
 /**
  * PRD §29 Users surface + profile model (§6 / §28).
@@ -146,13 +147,14 @@ export function createUserRoutes(auth, db) {
   router.get("/users/me", async (req, res) => {
     const userId = await requireUserId(req, res);
     if (!userId) return;
-    const [userDoc, statsDoc, solves] = await Promise.all([
+    const [userDoc, statsDoc, solves, achievements] = await Promise.all([
       db.collection("user").findOne({ _id: userId }),
       db.collection("profileStats").findOne({ userId: userId.toString() }),
       recentSolves(db, userId),
+      unlockedEntries(db, userId.toString()),
     ]);
     if (!userDoc) return res.status(404).json({ error: "User not found." });
-    return res.json({ user: sanitizeUser(userDoc), stats: sanitizeStats(statsDoc), recentSolves: solves });
+    return res.json({ user: sanitizeUser(userDoc), stats: sanitizeStats(statsDoc), recentSolves: solves, achievements });
   });
 
   router.patch("/users/me", strictAuthLimit(), validate(profileUpdateSchema), async (req, res) => {
@@ -249,14 +251,16 @@ export function createUserRoutes(auth, db) {
     if (!username) return res.status(404).json({ error: "User not found." });
     const userDoc = await db.collection("user").findOne({ username });
     if (!userDoc) return res.status(404).json({ error: "User not found." });
-    const [statsDoc, solves] = await Promise.all([
+    const [statsDoc, solves, achievements] = await Promise.all([
       db.collection("profileStats").findOne({ userId: userDoc._id.toString() }),
       recentSolves(db, userDoc._id),
+      unlockedEntries(db, userDoc._id.toString()),
     ]);
     return res.json({
       user: sanitizePublicUser(userDoc),
       stats: sanitizeStats(statsDoc),
       recentSolves: solves,
+      achievements,
     });
   });
 

@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import {
   auth,
@@ -107,12 +106,16 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const busyTimer = useRef(null);
+  // Verification-required: signup creates the account WITHOUT a session,
+  // so success lands here instead of /onboarding.
+  const [sentEmail, setSentEmail] = useState(null);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
 
   const username = useField(validateUsername);
   const email = useField(validateEmail);
   const password = useField(validatePassword);
   const [formError, setFormError] = useState(null);
-  const router = useRouter();
   const usernameRef = useRef(null);
   const emailRef = useRef(null);
   const passwordRef = useRef(null);
@@ -148,14 +151,15 @@ export default function SignupPage() {
     }
     setBusy(true);
     try {
+      const address = email.value.trim();
       await auth.register({
-        email: email.value.trim(),
+        email: address,
         password: password.value,
         username: username.value.trim(),
       });
-      // No verification step — straight into onboarding.
-      router.push("/onboarding");
-      router.refresh();
+      // No session until the email is verified — check-your-inbox state.
+      setSentEmail(address);
+      setResent(false);
     } catch (err) {
       const mapped = toFieldError(err);
       if (mapped?.field === "username") username.fail(mapped.message);
@@ -164,6 +168,19 @@ export default function SignupPage() {
       else setFormError(err.message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const resend = async () => {
+    if (resending || !sentEmail) return;
+    setResending(true);
+    try {
+      await auth.resendVerification(sentEmail);
+      setResent(true);
+    } catch {
+      setFormError("Couldn't resend the link. Try again shortly.");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -206,14 +223,39 @@ export default function SignupPage() {
             </Link>
             <div>
               <h1 className="Nox-display text-[30px] leading-[1.1] font-medium tracking-[-1px] text-ink">
-                Create your account
+                {sentEmail ? "Check your inbox" : "Create your account"}
               </h1>
               <p className="mt-2 text-[15px] leading-[1.3] tracking-[-0.15px] text-ink-muted">
-                Start fixing real bugs today.
+                {sentEmail
+                  ? `We sent a verification link to ${sentEmail}.`
+                  : "Start fixing real bugs today."}
               </p>
             </div>
           </div>
 
+          {sentEmail ? (
+            <div className="flex flex-col gap-4" role="status">
+              <p className="rounded-md bg-surface-1 px-[14px] py-[10px] text-[14px] leading-[1.4] text-ink-muted">
+                Click the link to verify, then log in and finish onboarding.
+                {resent ? " Fresh link just sent." : ""}
+              </p>
+              <button
+                type="button"
+                onClick={resend}
+                disabled={resending}
+                className={`Nox-focus inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-pill border-0 bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black disabled:cursor-wait disabled:opacity-70 ${HOVER} ${PRESS}`}
+              >
+                {resending ? "Sending…" : resent ? "Resend link" : "Didn't get it? Resend"}
+              </button>
+              <Link
+                href="/login"
+                className={`Nox-focus inline-flex min-h-[44px] w-full items-center justify-center rounded-pill bg-surface-1 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline hover:bg-surface-2 ${HOVER} ${PRESS}`}
+              >
+                Back to log in
+              </Link>
+            </div>
+          ) : (
+          <>
           <Link
             href="#"
             onClick={(e) => e.preventDefault()}
@@ -385,6 +427,8 @@ export default function SignupPage() {
               Log in
             </Link>
           </p>
+          </>
+          )}
         </div>
       </main>
     </div>

@@ -2,8 +2,9 @@
  * Nox API smoke test — full loop against a running API (default :4000).
  * Usage: bun scripts/smoke.js [baseUrl]
  *
- * Covers auth (verification DISABLED, direct signup), profile surface,
- * and the challenge catalog + admin API (PRD §7 / §20 / §22 / §29).
+ * Covers auth (verification ENFORCED; links read from the dev outbox —
+ * no RESEND_API_KEY needed), profile surface, and the challenge catalog
+ * + admin API (PRD §7 / §20 / §22 / §29).
  */
 import { MongoClient } from "mongodb";
 
@@ -69,10 +70,21 @@ check(
   `got ${created.status} ${JSON.stringify(created.json)}`
 );
 check(
-  "register signs straight in (session cookie, no verification)",
-  !!created.cookie && created.json?.user?.emailVerified !== undefined,
+  "register creates account with NO session (verification pending)",
+  !created.cookie,
   `cookie=${!!created.cookie}`
 );
+
+// Verification links land in the dev outbox (dev fallback in lib/email.js);
+// the token rides as ?token= on the frontend URL — same shape in prod email.
+async function verifyEmail(emailAddr) {
+  const out = await get(`/auth/dev/outbox?email=${encodeURIComponent(emailAddr)}`);
+  const link = out.json?.items?.find((i) => i.kind === "verify-email")?.url;
+  const token = link ? new URL(link).searchParams.get("token") : null;
+  if (!token) return false;
+  const v = await post("/auth/verify-email", { token });
+  return v.status === 200;
+}
 
 const badDomain = await post("/auth/register", {
   email: `${TAG}@example.com`,
@@ -103,19 +115,23 @@ const dupEmail = await post("/auth/register", {
 });
 
 const immediateLogin = await post("/auth/login", { email: EMAIL, password: PASS });
-check("login works immediately, no verification", immediateLogin.status === 200, `got ${immediateLogin.status}`);
+check("login before verification → 403", immediateLogin.status === 403, `got ${immediateLogin.status}`);
+check("verify-email link from outbox verifies", await verifyEmail(EMAIL));
+const verifiedLogin = await post("/auth/login", { email: EMAIL, password: PASS });
+check("login works after verification", verifiedLogin.status === 200, `got ${verifiedLogin.status}`);
 
 const mongo = new MongoClient("mongodb://127.0.0.1:27017/Nox");
 await mongo.connect();
 const pdb = mongo.db();
-// Verification disabled → no anti-enumeration veil: a taken email is a
-// plain 422 and nothing new is persisted.
+// With verification enforced, Better Auth answers duplicate-email signups
+// with a no-op 200 (anti-enumeration: nothing persisted, no session).
+// Verified live: echoed user object, count stays 1, no cookie.
 const dupEmailCount = await pdb
   .collection("user")
   .countDocuments({ email: EMAIL.toLowerCase() });
 check(
-  "duplicate email → 422, nothing persisted",
-  dupEmail.status === 422 && dupEmailCount === 1,
+  "duplicate email → no-op 200, nothing persisted",
+  dupEmail.status === 200 && dupEmailCount === 1,
   `got ${dupEmail.status}, count=${dupEmailCount}`
 );
 const userId = created.json?.user?.id;
@@ -303,6 +319,7 @@ const adminCreated = await post("/auth/register", {
   password: PASS,
   username: `a_${TAG}`.slice(0, 20),
 });
+check("admin account verifies", await verifyEmail(ADMIN_EMAIL));
 const adminCookie = adminCreated.cookie;
 const anonAdmin = await get("/admin/challenges");
 check("admin list without session → 401", anonAdmin.status === 401, `got ${anonAdmin.status}`);
@@ -489,6 +506,7 @@ check("admin can read any run", stranger.status === 200, `got ${stranger.status}
 // Fresh plain user (non-owner, non-admin) must not see the run at all.
 const plainEmail = `plain_${TAG}@gmail.com`;
 await post("/auth/register", { email: plainEmail, password: PASS, username: `p_${TAG}`.slice(0, 20) });
+await verifyEmail(plainEmail);
 const plainLogin = await post("/auth/login", { email: plainEmail, password: PASS });
 const snooped = await get(`/runs/${fixedRun.json?.runId}`, plainLogin.cookie);
 check("non-owner cannot read run (404)", snooped.status === 404, `got ${snooped.status}`);
@@ -550,16 +568,39 @@ check(
     accepted.results.every((r) => r.input === undefined && r.expected === undefined && r.actual === undefined),
   JSON.stringify(accepted?.results)?.slice(0, 160)
 );
+// First accept on attempt 2 (easy): first-fix only (+25), no clean-shot.
+check(
+  "first accept unlocks first-fix (+25 XP)",
+  accepted?.achievementXp === 25 &&
+    accepted?.achievementsUnlocked?.length === 1 &&
+    accepted?.achievementsUnlocked?.[0]?.key === "first-fix",
+  JSON.stringify(accepted?.achievementsUnlocked)?.slice(0, 160)
+);
 
 const afterStats = await get("/users/me", runCookie);
 check(
   "stats settled (rating/xp/solved/streak)",
-  afterStats.json?.stats?.xp === 50 &&
+  afterStats.json?.stats?.xp === 75 &&
     afterStats.json?.stats?.solvedCount === 1 &&
     afterStats.json?.stats?.currentStreak === 1 &&
     afterStats.json?.stats?.successRate === 0.5 &&
     afterStats.json?.user?.onboardingCompleted !== undefined,
   JSON.stringify(afterStats.json?.stats)?.slice(0, 200)
+);
+check(
+  "achievements ride on /users/me",
+  afterStats.json?.achievements?.length === 1 &&
+    afterStats.json?.achievements?.[0]?.key === "first-fix",
+  JSON.stringify(afterStats.json?.achievements)?.slice(0, 160)
+);
+
+const achCatalog = await get("/achievements");
+check(
+  "achievement catalog lists 8 with XP",
+  achCatalog.status === 200 &&
+    achCatalog.json?.achievements?.length === 8 &&
+    achCatalog.json?.achievements?.every((a) => a.xp === 25),
+  `got ${achCatalog.status}`
 );
 
 const resubmit = await post(
@@ -599,8 +640,19 @@ check(
 const afterRepeat = await get("/users/me", runCookie);
 check(
   "locked: xp and solved unchanged",
-  afterRepeat.json?.stats?.solvedCount === 1 && afterRepeat.json?.stats?.xp === 50,
+  afterRepeat.json?.stats?.solvedCount === 1 && afterRepeat.json?.stats?.xp === 75,
   `xp=${afterRepeat.json?.stats?.xp} solved=${afterRepeat.json?.stats?.solvedCount}`
+);
+
+const pubAch = await fetch(`${BASE}/users/${USER}`).then((r) =>
+  r.json().then((json) => ({ status: r.status, json }))
+);
+check(
+  "public profile exposes achievements",
+  pubAch.status === 200 &&
+    pubAch.json?.achievements?.length === 1 &&
+    pubAch.json?.achievements?.[0]?.key === "first-fix",
+  `got ${pubAch.status}`
 );
 
 const global = await get("/leaderboard/global?limit=50");

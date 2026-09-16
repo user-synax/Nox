@@ -8,11 +8,17 @@ import {
   ALLOWED_EMAIL_DOMAINS,
 } from "./validation.js";
 import { defaultProfileStats } from "./lib/stats.js";
+import { sendEmail, verifyEmailHtml, resetPasswordHtml } from "./lib/email.js";
 
 /**
  * Better Auth instance — email/password today, Google config-ready.
  * Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET to enable Google OAuth
  * (no code changes needed).
+ *
+ * Email delivery: Resend when RESEND_API_KEY is set, dev-outbox fallback
+ * otherwise (dev only). Verification is ENFORCED — signup creates the
+ * account without a session; login is 403 until the email is verified.
+ * Pre-enforcement accounts were grandfathered (scripts/grandfather-verified.js).
  *
  * PRD §28 User model mapping:
  *   Better Auth core → email, emailVerified, name (= displayName), image,
@@ -27,22 +33,6 @@ import { defaultProfileStats } from "./lib/stats.js";
 export function createAuth(db) {
   const isProd = env.NODE_ENV === "production";
 
-  // Dev-only outbox: persist the last verification / reset link per email
-  // so smoke tests + frontend devs can complete the flow without SMTP.
-  // Production must wire a real provider (Resend) here instead.
-  const recordDevOutbox = async (kind, email, url) => {
-    if (isProd) return;
-    try {
-      await db.collection("devOutbox").updateOne(
-        { email: email.toLowerCase(), kind },
-        { $set: { email: email.toLowerCase(), kind, url, createdAt: new Date() } },
-        { upsert: true }
-      );
-    } catch (err) {
-      console.error(`[auth] devOutbox write failed (${kind}):`, err?.message ?? err);
-    }
-  };
-
   return betterAuth({
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
@@ -51,17 +41,24 @@ export function createAuth(db) {
 
     emailAndPassword: {
       enabled: true,
-      // Verification disabled for now: users sign straight in on signup.
-      // Re-enable by flipping this to true (verify-email + resend flows
-      // in src/routes/auth.js and the frontend pages go live again).
-      requireEmailVerification: false,
+      // Enforced: signup creates the account WITHOUT a session and sends
+      // a verification link; login is 403 until verified. The signup page
+      // shows a check-your-inbox state; the login page offers resend.
+      requireEmailVerification: true,
       minPasswordLength: 8,
       maxPasswordLength: 128,
-      sendResetPassword: async ({ user, url }) => {
-        // Dev stub (per scope decision): log + persist for smoke/frontend.
-        // TODO(production): send via Resend.
-        console.log(`[auth] password reset for ${user.email}: ${url}`);
-        await recordDevOutbox("password-reset", user.email, url);
+      sendResetPassword: async ({ user, url, token }) => {
+        // The persisted `url` keeps its historic shape (smoke follows it);
+        // the emailed link always points at the frontend reset screen.
+        const link = `${env.FRONTEND_URL}/reset-password?token=${token}`;
+        await sendEmail(db, {
+          to: user.email,
+          subject: "Reset your Nox password",
+          html: resetPasswordHtml(link),
+          text: `Reset your Nox password: ${link}`,
+          kind: "password-reset",
+          url,
+        });
       },
     },
 
@@ -69,11 +66,15 @@ export function createAuth(db) {
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, token }) => {
         // Frontend owns the verify screen; the API token rides along as ?token=.
-        // Dev stub (per scope decision): log + persist for smoke/frontend.
-        // TODO(production): send via Resend.
         const url = `${env.FRONTEND_URL}/verify-email?token=${token}`;
-        console.log(`[auth] verify ${user.email}: ${url}`);
-        await recordDevOutbox("verify-email", user.email, url);
+        await sendEmail(db, {
+          to: user.email,
+          subject: "Verify your Nox account",
+          html: verifyEmailHtml(url),
+          text: `Verify your Nox account: ${url}`,
+          kind: "verify-email",
+          url,
+        });
       },
     },
 

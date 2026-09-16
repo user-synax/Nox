@@ -11,11 +11,13 @@ import { createAuthRoutes } from "./routes/auth.js";
 import { createUserRoutes } from "./routes/users.js";
 import { createChallengeRoutes } from "./routes/challenges.js";
 import { createDailyRoutes } from "./routes/daily.js";
+import { createAchievementRoutes } from "./routes/achievements.js";
 import { createAdminRoutes } from "./routes/admin.js";
 import { createRunRoutes } from "./routes/runs.js";
 import { createSubmissionRoutes } from "./routes/submissions.js";
 import { createLeaderboardRoutes } from "./routes/leaderboard.js";
 import { createSolutionRoutes } from "./routes/solutions.js";
+import { assertEmailReady } from "./lib/email.js";
 import { initRealtime } from "./lib/realtime.js";
 
 // Connect first: auth + indexes depend on the database.
@@ -33,6 +35,9 @@ try {
 }
 
 const auth = createAuth(db);
+// Prod-only: fail fast if the sender domain isn't verified in Resend,
+// instead of silently dropping verification/reset links at signup.
+await assertEmailReady();
 const app = express();
 app.disable("x-powered-by");
 // One trusted proxy hop (Vercel / reverse proxy) so req.ip + secure
@@ -83,6 +88,8 @@ app.use(createChallengeRoutes(auth, db));
 app.use("/api", createChallengeRoutes(auth, db));
 app.use(createDailyRoutes(auth, db));
 app.use("/api", createDailyRoutes(auth, db));
+app.use(createAchievementRoutes(auth, db));
+app.use("/api", createAchievementRoutes(auth, db));
 app.use(createAdminRoutes(auth, db));
 app.use("/api", createAdminRoutes(auth, db));
 

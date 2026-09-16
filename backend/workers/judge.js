@@ -6,6 +6,11 @@ import {
   scoreSubmission,
   levelFor,
 } from "./scoring.js";
+import {
+  ACHIEVEMENT_XP,
+  achievementByKey,
+  evaluateAchievements,
+} from "./achievements.js";
 import { defaultProfileStats } from "../src/lib/stats.js";
 
 /**
@@ -95,7 +100,7 @@ export async function judgeSubmit(db, job, exec) {
   const now = new Date();
   const current = (await statsCol.findOne({ userId })) ?? defaultProfileStats(userId);
   const newRating = (current.rating ?? 1000) + ratingDelta;
-  const newXp = (current.xp ?? 0) + xpAwarded;
+  let newXp = (current.xp ?? 0) + xpAwarded;
   let { currentStreak = 0, longestStreak = 0 } = current;
   const lastActive = current.lastActiveDate ?? null;
   if (status === "accepted") {
@@ -109,6 +114,51 @@ export async function judgeSubmit(db, job, exec) {
     }
     longestStreak = Math.max(longestStreak, currentStreak);
   }
+  // Achievements (accepted only): evaluated on post-solve values, +25 XP
+  // each, one-time. Rating is untouched — XP/level only.
+  let newKeys = [];
+  let achievementXp = 0;
+  if (status === "accepted") {
+    const langs = new Set(Object.keys(current.solvesByLanguage ?? {}));
+    if (!priorAccepted && solveLanguage) langs.add(solveLanguage);
+    let already = new Set();
+    try {
+      const rows = await db
+        .collection("userAchievements")
+        .find({ userId }, { projection: { key: 1 } })
+        .toArray();
+      already = new Set(rows.map((r) => r.key));
+    } catch {
+      /* first unlock path — treat as none */
+    }
+    newKeys = evaluateAchievements({
+      difficulty: job.difficulty ?? "medium",
+      attemptNumber,
+      firstSolve: !priorAccepted,
+      newRating,
+      newLongestStreak: longestStreak,
+      newSolvedCount: (current.solvedCount ?? 0) + (!priorAccepted ? 1 : 0),
+      languageCount: langs.size,
+      already,
+    });
+    if (newKeys.length > 0) {
+      achievementXp = newKeys.length * ACHIEVEMENT_XP;
+      newXp += achievementXp;
+      try {
+        await db.collection("userAchievements").insertMany(
+          newKeys.map((key) => ({ userId, key, unlockedAt: now })),
+          { ordered: false }
+        );
+      } catch {
+        /* duplicate-key race: another worker unlocked first — harmless */
+      }
+    }
+  }
+  const achievementsUnlocked = newKeys.map((key) => {
+    const def = achievementByKey(key);
+    return { key, name: def?.name ?? key, description: def?.description ?? "", xp: ACHIEVEMENT_XP };
+  });
+
   const set = {
     rating: newRating,
     xp: newXp,
@@ -181,6 +231,8 @@ export async function judgeSubmit(db, job, exec) {
     testsTotal: exec.testsTotal ?? 0,
     results: stripped,
     executionTimeMs: exec.executionTimeMs ?? null,
+    achievementsUnlocked,
+    achievementXp,
     score: score.total,
     scoreBreakdown:
       status === "accepted"
@@ -211,5 +263,5 @@ export async function judgeSubmit(db, job, exec) {
       .catch(() => {});
   }
   const submission = await submissions.findOne({ _id: job.submissionId });
-  return { submission, score, xpAwarded, ratingDelta, firstSolve: !priorAccepted && status === "accepted" };
+  return { submission, score, xpAwarded, achievementXp, achievementsUnlocked, ratingDelta, firstSolve: !priorAccepted && status === "accepted" };
 }

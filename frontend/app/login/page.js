@@ -100,6 +100,10 @@ export default function LoginPage() {
   const email = useField(validateEmail);
   const password = useField(validatePassword);
   const [formError, setFormError] = useState(null);
+  // 403 EMAIL_NOT_VERIFIED lands here with a resend action.
+  const [unverified, setUnverified] = useState(null);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
   const router = useRouter();
   const emailRef = useRef(null);
   const passwordRef = useRef(null);
@@ -133,19 +137,39 @@ export default function LoginPage() {
       return;
     }
     setBusy(true);
+    setUnverified(null);
     try {
-      await auth.login({ email: email.value.trim(), password: password.value });
+      const address = email.value.trim();
+      await auth.login({ email: address, password: password.value });
       // Fresh users land in onboarding, everyone else hits the dashboard.
       const { user } = await auth.meFull();
       router.push(user?.onboardingCompleted ? "/dashboard" : "/onboarding");
       router.refresh();
     } catch (err) {
+      if (err?.code === "EMAIL_NOT_VERIFIED" || /not verified/i.test(err?.message ?? "")) {
+        setUnverified(email.value.trim());
+        setResent(false);
+        return;
+      }
       const mapped = toFieldError(err);
       if (mapped?.field === "email") email.fail(mapped.message);
       else if (mapped?.field === "password") password.fail(mapped.message);
       else setFormError(err.message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const resend = async () => {
+    if (resending || !unverified) return;
+    setResending(true);
+    try {
+      await auth.resendVerification(unverified);
+      setResent(true);
+    } catch {
+      setFormError("Couldn't resend the link. Try again shortly.");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -223,6 +247,25 @@ export default function LoginPage() {
               >
                 {formError}
               </p>
+            ) : null}
+            {unverified ? (
+              <div
+                role="alert"
+                className="rounded-md bg-surface-1 px-[14px] py-[10px] text-[14px] leading-[1.4] text-ink"
+              >
+                <p>
+                  Email not verified — check <span className="font-medium">{unverified}</span> for
+                  the link.{resent ? " Fresh link just sent." : ""}
+                </p>
+                <button
+                  type="button"
+                  onClick={resend}
+                  disabled={resending}
+                  className="Nox-focus mt-2 cursor-pointer rounded bg-transparent p-0 text-[14px] font-medium text-accent-blue hover:underline disabled:cursor-wait disabled:opacity-70"
+                >
+                  {resending ? "Sending…" : "Resend verification email"}
+                </button>
+              </div>
             ) : null}
             <div className={`t-input-wrap ${email.error ? "is-error" : ""}`}>
               <label

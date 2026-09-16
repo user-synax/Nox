@@ -10,7 +10,7 @@
 ## What's already on the app
 
 ### Core loop (working)
-- **Auth:** email/password (Better Auth), Google OAuth code-complete (enabled by env, credentials being configured), sessions (7-day DB, daily refresh, 5-min cookie cache), logout, verify-email + password-reset endpoints and pages (enforcement OFF — signup signs straight in, links go to a dev-only outbox until a real provider is wired), domain allow-list, rate-limited auth attempts, `make-admin.js` role script.
+- **Auth:** email/password (Better Auth), Google OAuth code-complete (enabled by env, credentials being configured), sessions (7-day DB, daily refresh, 5-min cookie cache), logout, email verification ENFORCED (Resend via `RESEND_API_KEY`, dev-outbox fallback; signup → check-inbox → verify → onboarding; login offers resend on 403; pre-enforcement accounts grandfathered), password reset via emailed link, domain allow-list, rate-limited auth attempts, `make-admin.js` + `grandfather-verified.js` scripts.
 - **User profiles:** public `/u/[username]` pages (stats, languages/interests, solutions, activity tabs); own-profile edit + `/settings` page, avatar upload (JPEG/PNG/WebP ≤ 2MB via Appwrite), onboarding wizard (3 steps: profile → languages/interests → links).
 - **Challenge catalog:** admin CRUD (ADMIN+, API only — no admin UI), publish/unpublish, hidden-test management, version auto-bump, slugs, tags, difficulty, category (all 8 incl. `newbies`), kind (`bug-fix`, `logic-error`, `runtime-error`, `api-bug`), time/memory limits, starter files, visible + hidden tests, testContext injection, entry file + entry function.
 - **Solving flow:** `/challenges/[slug]/solve` — Monaco editor (Nox-dark theme), multi-file tab switching, autosave drafts to IndexedDB, reset-to-starter, run visible tests (POST `/challenges/:id/run` → 202 `{runId}`), submit for hidden judging (POST `/challenges/:id/submit` → 202 `{submissionId}`), poll for verdict, score/XP/rating breakdown UI, solved-state read-only lock, share-solution deep link.
@@ -131,13 +131,14 @@ These are ordered roughly by dependency and upside. Each has a short "why" and a
 - Medium-term: move language runners into Docker containers or a sandboxed runtime (gVisor/firejail/seccomp) so each job is isolated beyond a temp dir. The queue protocol already isolates workers, so swapping in Docker workers later is a runner change, not a core rewrite.
 - Keep network disabled, no env leakage (sandbox env already strips most), no secrets in job payloads.
 
-### 12. Email delivery in production (remove dev stubs)
-**Why:** Password reset and email verification both use a dev outbox (log + persist to `devOutbox`) guarded by `isProd`. To ship real verification + reset flows, wire a real provider (Resend is mentioned in comments).
+### 12. Email delivery in production (remove dev stubs) — DONE (2026-09-16)
+**Was:** Password reset and email verification used a dev outbox; verification unenforced.
 
-**Shape:**
-- Replace `recordDevOutbox` / console.log with a real send via Resend (or similar) in production; keep dev outbox for local dev/smoke.
-- Flip `requireEmailVerification` to true when ready; the frontend verify-email page + resend flow are already scaffolded.
-- Add SMTP/provider config to env, test the full reset + verify loops in smoke.
+- `src/lib/email.js` sends via Resend when `RESEND_API_KEY` is set (from `Nox <noreply@nox.synax.me>`, overridable via `EMAIL_FROM`); dev keeps the outbox fallback — always written in non-prod, and used as fallback when a send fails, so local work never blocks on provider state; production boots fail without a key AND without a verified sender domain (`assertEmailReady`, since Better Auth swallows email-callback failures and a broken domain would otherwise silently eat every link).
+- `requireEmailVerification: true`; signup shows check-your-inbox + resend, login shows resend on 403, `/verify-email` Continue routes to `/onboarding`.
+- Pre-enforcement accounts grandfathered (`scripts/grandfather-verified.js` — run once per DB, then retire).
+- Smoke covers the full loop: register → 403 login → outbox verify → 200 login; duplicate-email documents the no-op-200 anti-enumeration behavior.
+- Remaining ops: verify `nox.synax.me` in Resend and set `RESEND_API_KEY` in the production env.
 
 ### 13. Google OAuth activation + future GitHub OAuth
 **Why:** Google OAuth config is in place (conditional on `GOOGLE_CLIENT_ID`/`SECRET`), and the frontend has Google buttons (stubbed "coming soon"). GitHub OAuth is listed as a future auth method in PRD §5.

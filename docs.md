@@ -65,9 +65,10 @@
 | Email/password registration | Available | Username, email, password with validation |
 | Email/password login | Available | Session-based with httpOnly cookies |
 | Logout | Available | Clears session cookie |
-| Email verification | Partial | Endpoints + `/verify-email` page live; enforcement OFF (signup signs straight in, links go to dev-only outbox) |
-| Forgot password | Partial | Works end-to-end in dev via outbox; needs real provider in prod |
-| Reset password | Partial | Same dev-outbox note as forgot password |
+| Email verification | Available | Enforced — signup → check inbox → verify → onboarding; login 403 until verified, with resend |
+| Forgot password | Available | Emailed reset link (Resend; dev-outbox fallback) |
+| Reset password | Available | Token-based password change |
+| Email provider | Available | Resend (`RESEND_API_KEY`); dev outbox fallback when unset; prod boot fails without key |
 | Google OAuth | Configured | Code-complete — enabled by `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` env |
 | Session management | Available | 7-day DB expiry, daily refresh, 5-min cookie cache |
 | Domain allowlist | Available | Gmail, Proton, iCloud, Outlook, etc. |
@@ -638,6 +639,8 @@ All animations respect `prefers-reduced-motion`.
 | `FRONTEND_URL` | No | http://localhost:3000 | Frontend origin |
 | `GOOGLE_CLIENT_ID` | No | — | Google OAuth |
 | `GOOGLE_CLIENT_SECRET` | No | — | Google OAuth |
+| `RESEND_API_KEY` | Prod only | — | Outbound email (verification + reset) |
+| `EMAIL_FROM` | No | Nox <noreply@nox.synax.me> | Sender identity (verify domain in Resend) |
 | `APPWRITE_ENDPOINT` | No | — | Appwrite endpoint |
 | `APPWRITE_PROJECT_ID` | No | — | Appwrite project |
 | `APPWRITE_BUCKET_AVATARS` | No | avatars | Storage bucket |
@@ -655,7 +658,8 @@ All animations respect `prefers-reduced-motion`.
 
 | Script | Location | Description |
 |--------|----------|-------------|
-| `smoke.js` | `backend/scripts/` | Integration suite vs running API (auth, profile, catalog, admin; verification disabled) |
+| `smoke.js` | `backend/scripts/` | Integration suite vs running API (auth incl. enforced verification, profile, catalog, admin, execution, judging, boards) |
+| `grandfather-verified.js` | `backend/scripts/` | One-off: mark pre-enforcement accounts verified (run once per DB, then retire) |
 | `seed-challenges.js` | `backend/scripts/` | Seed 59 published JS + Python challenges (upsert by slug) |
 | `make-admin.js` | `backend/scripts/` | Grant role to user by email |
 | `dev-all.js` | `backend/scripts/` | Run API + worker together (`bun run dev:all`) |

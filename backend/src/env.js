@@ -18,6 +18,11 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  // Outbound email (verification + password reset). Optional in dev
+  // (dev-outbox fallback); required in production — verification
+  // enforcement cannot send without it.
+  RESEND_API_KEY: z.string().min(1).optional(),
+  EMAIL_FROM: z.string().min(1).default("Nox <noreply@nox.synax.me>"),
   // Appwrite avatar storage (all four or none — avatar upload 503s until set).
   APPWRITE_ENDPOINT: z.string().url().optional(),
   APPWRITE_PROJECT_ID: z.string().min(1).optional(),
@@ -40,6 +45,11 @@ if (
   (!parsed.data.GOOGLE_CLIENT_ID && parsed.data.GOOGLE_CLIENT_SECRET)
 ) {
   console.error("[env] GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together.");
+  process.exit(1);
+}
+
+if (parsed.data.NODE_ENV === "production" && !parsed.data.RESEND_API_KEY) {
+  console.error("[env] RESEND_API_KEY is required in production (verification emails).");
   process.exit(1);
 }
 

@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Copy, FileCode2, FlaskConical, LayoutDashboard, LoaderCircle, RotateCcw, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Copy, FileCode2, FlaskConical, LayoutDashboard, LoaderCircle, RotateCcw, Trophy, X } from "lucide-react";
 import { API_BASE, auth, rankFor, signOutAndLogin } from "../../../../lib/auth";
 import { StatNumber } from "../../../../components/Stat";
 import {
@@ -269,6 +269,9 @@ function VerdictCard({ result, preRating, challengeSlug, onDismiss }) {
         <span className={result?.xpAwarded ? "text-success" : "text-ink-muted"}>
           {result?.xpAwarded ? `+${result.xpAwarded} XP` : "+0 XP"}
         </span>
+        {(result?.achievementXp ?? 0) > 0 ? (
+          <span className="text-success">+{result.achievementXp} XP achievements</span>
+        ) : null}
         <span className={(result?.ratingDelta ?? 0) >= 0 ? "text-success" : "text-danger"}>
           {`${(result?.ratingDelta ?? 0) >= 0 ? "+" : ""}${result?.ratingDelta ?? 0} rating`}
         </span>
@@ -276,6 +279,29 @@ function VerdictCard({ result, preRating, challengeSlug, onDismiss }) {
           <span className="text-accent-blue">Rank up: {rankFor(newRating)}!</span>
         ) : null}
       </div>
+
+      {(result?.achievementsUnlocked?.length ?? 0) > 0 ? (
+        <ul className="mt-3 flex flex-col gap-1.5" aria-label="Achievements unlocked">
+          {result.achievementsUnlocked.map((a) => (
+            <li
+              key={a.key}
+              className="flex items-center gap-2.5 rounded-md bg-canvas px-3 py-2 text-[13.5px] text-ink"
+            >
+              <span
+                aria-hidden="true"
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success"
+              >
+                <Trophy size={13} strokeWidth={2.5} />
+              </span>
+              <span className="min-w-0 flex-1 truncate">
+                <span className="font-medium">{a.name}</span>
+                <span className="text-ink-muted"> — {a.description}</span>
+              </span>
+              <span className="Nox-mono shrink-0 text-[12px] text-success">+{a.xp ?? 25}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       <div className="mt-4 flex flex-wrap gap-2">
         {result?.status === "accepted" && challengeSlug ? (

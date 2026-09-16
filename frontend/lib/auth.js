@@ -263,6 +263,8 @@ export const auth = {
   },
   /** Challenge detail — starter files + visible tests (hidden stripped server-side). */
   getChallenge: (slug) => request(`/challenges/${encodeURIComponent(slug)}`),
+  /** Achievement catalog + viewer's unlocked keys (anonymous: catalog only). */
+  achievementsCatalog: () => request("/achievements"),
   /** Daily challenge — today's canonical pick (UTC auto-rotation).
    *  Optional date: "YYYY-MM-DD" for a historic day. */
   getDailyChallenge: (date) =>

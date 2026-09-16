@@ -78,7 +78,9 @@ function VerifyInner() {
             <button
               type="button"
               onClick={() => {
-                router.push("/");
+                // New users haven't onboarded; onboarded users bounce
+                // straight to /dashboard from the onboarding gate.
+                router.push("/onboarding");
                 router.refresh();
               }}
               className={`Nox-focus inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-pill border-0 bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black ${HOVER} ${PRESS}`}
