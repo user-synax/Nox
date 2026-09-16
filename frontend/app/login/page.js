@@ -118,21 +118,22 @@ export default function LoginPage() {
   useEffect(() => () => clearTimeout(busyTimer.current), []);
 
   /* OAuth return: Google sends failures back here as ?error=. Read it
-     in an effect (not a lazy initializer) so the first client render
+     post-hydration (not a lazy initializer) so the first client render
      matches the server HTML — otherwise React hydration mismatches (#418). */
   const [oauthError, setOauthError] = useState(null);
   useEffect(() => {
-    let found = null;
-    try {
-      const q = new URLSearchParams(window.location.search);
-      if (q.get("error")) {
-        found = { code: q.get("error"), detail: q.get("error_description") };
-        window.history.replaceState(null, "", window.location.pathname);
+    const raf = requestAnimationFrame(() => {
+      try {
+        const q = new URLSearchParams(window.location.search);
+        if (q.get("error")) {
+          setOauthError({ code: q.get("error"), detail: q.get("error_description") });
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* ignore */
-    }
-    if (found) setOauthError(found);
+    });
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   const oauthMessage = oauthError
@@ -308,16 +309,24 @@ export default function LoginPage() {
               >
                 <p>
                   Email not verified — check <span className="font-medium">{unverified}</span> for
-                  the link.{resent ? " Fresh link just sent." : ""}
+                  the 6-digit code.{resent ? " Fresh code just sent." : ""}
                 </p>
-                <button
-                  type="button"
-                  onClick={resend}
-                  disabled={resending}
-                  className="Nox-focus mt-2 cursor-pointer rounded bg-transparent p-0 text-[14px] font-medium text-accent-blue hover:underline disabled:cursor-wait disabled:opacity-70"
-                >
-                  {resending ? "Sending…" : "Resend verification email"}
-                </button>
+                <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <Link
+                    href={`/verify?email=${encodeURIComponent(unverified)}`}
+                    className="Nox-focus rounded text-[14px] font-medium text-accent-blue no-underline hover:underline"
+                  >
+                    Enter code
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={resend}
+                    disabled={resending}
+                    className="Nox-focus cursor-pointer rounded bg-transparent p-0 text-[14px] font-medium text-accent-blue hover:underline disabled:cursor-wait disabled:opacity-70"
+                  >
+                    {resending ? "Sending…" : "Resend code"}
+                  </button>
+                </p>
               </div>
             ) : null}
             <div className={`t-input-wrap ${email.error ? "is-error" : ""}`}>

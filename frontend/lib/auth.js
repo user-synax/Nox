@@ -109,8 +109,9 @@ export const auth = {
       body: { provider: "google", callbackURL, newUserCallbackURL, errorCallbackURL, loginHint },
     }),
   me: () => request("/auth/me"),
-  verifyEmail: (token) =>
-    request("/auth/verify-email", { method: "POST", body: { token } }),
+  /** Verify the 6-digit signup code → session. */
+  verifyOtp: (email, otp) =>
+    request("/auth/verify-email", { method: "POST", body: { email, otp } }),
   forgotPassword: (email) =>
     request("/auth/forgot-password", { method: "POST", body: { email } }),
   resetPassword: (token, password) =>

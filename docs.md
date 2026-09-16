@@ -28,7 +28,7 @@
 |-----------|---------|---------|
 | Node.js | v18+ | Runtime |
 | Express.js | 4.21.2 | HTTP framework |
-| Better Auth | 1.3.x | Authentication (email/password, OAuth) |
+| Hand-rolled sessions | — | Opaque tokens + scrypt passwords, Google OAuth code flow (no auth deps) |
 | MongoDB | 6.12.0 | Database (native driver) |
 | Zod | 3.23.8 | Schema validation |
 | Helmet | 8.0.0 | Security headers |
@@ -65,12 +65,12 @@
 | Email/password registration | Available | Username, email, password with validation |
 | Email/password login | Available | Session-based with httpOnly cookies |
 | Logout | Available | Clears session cookie |
-| Email verification | Available | Enforced — signup → check inbox → verify → onboarding; login 403 until verified, with resend |
+| Email verification | Available | Enforced 6-digit OTP — signup → `/verify` code screen → onboarding; login 403 until verified, with resend |
 | Forgot password | Available | Emailed reset link (Resend; dev-outbox fallback) |
 | Reset password | Available | Token-based password change |
 | Email provider | Available | Resend (`RESEND_API_KEY`); dev outbox fallback when unset; prod boot fails without key |
 | Google OAuth | Configured | Code-complete — enabled by `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` env |
-| Session management | Available | 7-day DB expiry, daily refresh, 5-min cookie cache |
+| Session management | Available | 7-day DB expiry, daily refresh, single-use email tokens |
 | Domain allowlist | Available | Gmail, Proton, iCloud, Outlook, etc. |
 | Rate limiting | Available | 20 req/min on auth endpoints |
 
@@ -328,7 +328,7 @@ Full frontend page (`/leaderboard`) + dashboard mini widget + rank badges. Per-t
 | `POST` | `/auth/login` | Email/password login |
 | `POST` | `/auth/logout` | Clear session |
 | `GET` | `/auth/me` | Current session |
-| `POST` | `/auth/verify-email` | Verify email with token |
+| `POST` | `/auth/verify-email` | Verify 6-digit code (`{ email, otp }`) |
 | `POST` | `/auth/forgot-password` | Request password reset |
 | `POST` | `/auth/reset-password` | Reset password with token |
 
@@ -417,7 +417,7 @@ Full frontend page (`/leaderboard`) + dashboard mini widget + rank badges. Per-t
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/health` | `{ ok, time, queue: { queued, running }, workersOnline }` |
-| `GET` | `/auth/dev/outbox?email=` | Dev-only: last verification/reset links (never in prod) |
+| `GET` | `/auth/dev/outbox?email=` | Dev-only: last verification codes + reset links (never in prod) |
 
 All routes are mounted at both `/` and `/api`.
 
@@ -525,7 +525,7 @@ Immutable once judged. Locks `challengeVersion`; `files[]` is the source snapsho
 | `/signup` | Signup | Registration form |
 | `/forgot-password` | Forgot Password | Email input |
 | `/reset-password` | Reset Password | New password form |
-| `/verify-email` | Verify Email | Token verification |
+| `/verify` | Verify | 6-digit code screen (email prefilled via `?email=`) |
 | `/u/[username]` | Public Profile | Stats, languages/interests, solutions, activity |
 | `/leaderboard` | Leaderboards | Global / level / weekly / language / category + own position |
 | `/solutions/[id]` | Solution Detail | Post, code, likes, comment thread (solved-gated) |

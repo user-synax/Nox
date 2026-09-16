@@ -21,7 +21,7 @@ function client() {
   return resend;
 }
 
-export async function sendEmail(db, { to, subject, html, text, kind, url }) {
+export async function sendEmail(db, { to, subject, html, text, kind, url, code }) {
   const email = String(to ?? "").toLowerCase();
   const api = client();
 
@@ -56,17 +56,37 @@ export async function sendEmail(db, { to, subject, html, text, kind, url }) {
   }
 
   // Dev observability: smoke + frontend devs finish flows without SMTP.
-  if (env.NODE_ENV !== "production" && db && kind && url) {
+  if (env.NODE_ENV !== "production" && db && kind && (url || code)) {
     try {
       await db.collection("devOutbox").updateOne(
         { email, kind },
-        { $set: { email, kind, url, createdAt: new Date() } },
+        {
+          $set: {
+            email,
+            kind,
+            ...(url ? { url } : {}),
+            ...(code ? { code } : {}),
+            createdAt: new Date(),
+          },
+        },
         { upsert: true }
       );
     } catch (err) {
       console.error(`[email] devOutbox write failed (${kind}):`, err?.message ?? err);
     }
   }
+}
+
+export function verifyOtpHtml(code) {
+  return `<div style="font-family:Inter,Arial,sans-serif;background:#080B0F;color:#F5F7FA;padding:32px">
+  <div style="max-width:480px;margin:0 auto;background:#11161C;border:1px solid #222A33;border-radius:12px;padding:32px;text-align:center">
+    <p style="font-size:22px;font-weight:700;margin:0 0 8px">Nox</p>
+    <h1 style="font-size:20px;margin:0 0 12px">Your verification code</h1>
+    <p style="font-size:15px;line-height:1.5;color:#98A2B3;margin:0 0 24px">Enter this code within 10 minutes to verify your account.</p>
+    <p style="font-size:36px;font-weight:700;letter-spacing:8px;margin:0 0 8px">${code}</p>
+    <p style="font-size:12px;color:#98A2B3;margin:16px 0 0">Didn't ask for this? Ignore the email.</p>
+  </div>
+</div>`;
 }
 
 /**

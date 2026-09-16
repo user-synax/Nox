@@ -5,7 +5,7 @@ import { strictAuthLimit } from "../middleware/rateLimit.js";
 import {
   signupSchema,
   loginSchema,
-  verifyEmailSchema,
+  verifyOtpSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
 } from "../validation.js";
@@ -19,22 +19,22 @@ import {
   destroySession,
   requestMeta,
 } from "../lib/session.js";
-import { issueToken, consumeToken, VERIFY_TTL_MS, RESET_TTL_MS } from "../lib/tokens.js";
-import { sendEmail, verifyEmailHtml, resetPasswordHtml } from "../lib/email.js";
+import { issueToken, consumeToken, RESET_TTL_MS, issueOtp, consumeOtp } from "../lib/tokens.js";
+import { sendEmail, verifyOtpHtml, resetPasswordHtml } from "../lib/email.js";
 import { defaultProfileStats } from "../lib/stats.js";
 import { googleKickoff, googleCallback } from "../lib/oauth.js";
 
 /**
  * Auth surface (PRD §29) — hand-rolled sessions, no auth library.
  *
- *   POST /auth/register  → create account (NO session; verification email)
+ *   POST /auth/register  → create account (NO session; 6-digit OTP email)
  *   POST /auth/login     → session cookie (403 until verified)
  *   POST /auth/logout    → destroy session + clear cookie
  *   GET  /auth/me        → current user + profileStats (401 when signed out)
- *   POST /auth/verify-email
+ *   POST /auth/verify-email { email, otp } → verify code, sign in
  *   POST /auth/forgot-password
  *   POST /auth/reset-password
- *   POST /api/auth/send-verification-email (resend; always 200)
+ *   POST /api/auth/send-verification-email (resend code; always 200)
  *   POST /api/auth/sign-in/social         (Google kickoff → { url })
  *   GET  /api/auth/callback/google        (Google return → 302 frontend)
  *
@@ -78,21 +78,16 @@ async function ensureProfileStats(db, userId) {
   }
 }
 
-async function sendVerifyEmail(db, userDoc) {
-  const token = await issueToken(db, {
-    userId: userDoc._id,
-    email: userDoc.email,
-    type: "verify",
-    ttlMs: VERIFY_TTL_MS,
-  });
-  const url = `${env.FRONTEND_URL}/verify-email?token=${token}`;
+async function sendVerifyOtp(db, userDoc) {
+  // Fresh code per send — previous live codes are invalidated.
+  const code = await issueOtp(db, { userId: userDoc._id, email: userDoc.email });
   await sendEmail(db, {
     to: userDoc.email,
-    subject: "Verify your Nox account",
-    html: verifyEmailHtml(url),
-    text: `Verify your Nox account: ${url}`,
-    kind: "verify-email",
-    url,
+    subject: `Your Nox code is ${code}`,
+    html: verifyOtpHtml(code),
+    text: `Your Nox verification code is ${code}. It expires in 10 minutes.`,
+    kind: "verify-otp",
+    code,
   });
 }
 
@@ -108,11 +103,11 @@ export function createAuthRoutes(db) {
         const { email, password, username, displayName } = req.body;
         const existing = await db.collection("user").findOne({ email });
         if (existing) {
-          // Anti-enumeration no-op (matches previous behavior): re-send
-          // the link for pending accounts, persist nothing, no session.
+          // Anti-enumeration no-op: re-send the code for pending accounts,
+          // persist nothing, no session.
           if (!existing.emailVerified) {
             try {
-              await sendVerifyEmail(db, existing);
+              await sendVerifyOtp(db, existing);
             } catch {
               /* send failure must not reveal the account */
             }
@@ -162,8 +157,8 @@ export function createAuthRoutes(db) {
           throw err;
         }
         await ensureProfileStats(db, userDoc._id);
-        await sendVerifyEmail(db, userDoc);
-        // No session until the email is verified (enforced at login).
+        await sendVerifyOtp(db, userDoc);
+        // No session until the code is verified (enforced at login).
         return res.json({ user: sanitizeUser(userDoc) });
       } catch (err) {
         console.error("[auth] register failed:", err?.message ?? err);
@@ -190,7 +185,7 @@ export function createAuthRoutes(db) {
         }
         if (!userDoc.emailVerified) {
           return res.status(403).json({
-            error: "Email not verified. Check your inbox for the link.",
+            error: "Email not verified. Check your inbox for the code.",
             code: "EMAIL_NOT_VERIFIED",
           });
         }
@@ -242,12 +237,19 @@ export function createAuthRoutes(db) {
   router.post(
     "/auth/verify-email",
     strictAuthLimit(),
-    validate(verifyEmailSchema),
+    validate(verifyOtpSchema),
     async (req, res) => {
       try {
-        const row = await consumeToken(db, { token: req.body.token, type: "verify" });
+        // Idempotent: already-verified users succeed without a code.
+        const known = await db.collection("user").findOne({ email: req.body.email });
+        if (known?.emailVerified) {
+          const meta = requestMeta(req);
+          setSessionCookie(res, await createSession(db, known._id, meta));
+          return res.json({ user: sanitizeUser(known) });
+        }
+        const row = await consumeOtp(db, { email: req.body.email, code: req.body.otp });
         if (!row) {
-          return res.status(400).json({ error: "This link is invalid or expired." });
+          return res.status(400).json({ error: "Invalid or expired code." });
         }
         await db
           .collection("user")
@@ -256,7 +258,7 @@ export function createAuthRoutes(db) {
             { $set: { emailVerified: true, updatedAt: new Date() } }
           );
         const userDoc = await db.collection("user").findOne({ _id: row.userId });
-        if (!userDoc) return res.status(400).json({ error: "This link is invalid or expired." });
+        if (!userDoc) return res.status(400).json({ error: "Invalid or expired code." });
         // Verified users land signed in (verify page routes to onboarding).
         const meta = requestMeta(req);
         setSessionCookie(res, await createSession(db, userDoc._id, meta));
@@ -359,7 +361,7 @@ const resendSchema = z.object({ email: z.string().trim().toLowerCase().email() }
 export function createNativeAuthRoutes(db) {
   const router = Router();
 
-  // Re-send a verification link. Always 200 — never reveal account state.
+  // Re-send a verification code. Always 200 — never reveal account state.
   router.post("/api/auth/send-verification-email", strictAuthLimit(), async (req, res) => {
     try {
       const parsed = resendSchema.safeParse(req.body);
@@ -367,7 +369,7 @@ export function createNativeAuthRoutes(db) {
         const userDoc = await db.collection("user").findOne({ email: parsed.data.email });
         if (userDoc && !userDoc.emailVerified) {
           try {
-            await sendVerifyEmail(db, userDoc);
+            await sendVerifyOtp(db, userDoc);
           } catch {
             /* generic response either way */
           }

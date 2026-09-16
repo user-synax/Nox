@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import {
   auth,
@@ -107,11 +108,7 @@ export default function SignupPage() {
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const busyTimer = useRef(null);
-  // Verification-required: signup creates the account WITHOUT a session,
-  // so success lands here instead of /onboarding.
-  const [sentEmail, setSentEmail] = useState(null);
-  const [resending, setResending] = useState(false);
-  const [resent, setResent] = useState(false);
+  const router = useRouter();
 
   const username = useField(validateUsername);
   const email = useField(validateEmail);
@@ -130,21 +127,22 @@ export default function SignupPage() {
   useEffect(() => () => clearTimeout(busyTimer.current), []);
 
   /* OAuth return: Google sends failures back here as ?error=. Read it
-     in an effect (not a lazy initializer) so the first client render
+     post-hydration (not a lazy initializer) so the first client render
      matches the server HTML — otherwise React hydration mismatches (#418). */
   const [oauthError, setOauthError] = useState(null);
   useEffect(() => {
-    let found = null;
-    try {
-      const q = new URLSearchParams(window.location.search);
-      if (q.get("error")) {
-        found = { code: q.get("error"), detail: q.get("error_description") };
-        window.history.replaceState(null, "", window.location.pathname);
+    const raf = requestAnimationFrame(() => {
+      try {
+        const q = new URLSearchParams(window.location.search);
+        if (q.get("error")) {
+          setOauthError({ code: q.get("error"), detail: q.get("error_description") });
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* ignore */
-    }
-    if (found) setOauthError(found);
+    });
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   const oauthMessage = oauthError
@@ -207,9 +205,9 @@ export default function SignupPage() {
         password: password.value,
         username: username.value.trim(),
       });
-      // No session until the email is verified — check-your-inbox state.
-      setSentEmail(address);
-      setResent(false);
+      // No session until the code is verified — over to the code screen.
+      router.push(`/verify?email=${encodeURIComponent(address)}`);
+      router.refresh();
     } catch (err) {
       const mapped = toFieldError(err);
       if (mapped?.field === "username") username.fail(mapped.message);
@@ -218,19 +216,6 @@ export default function SignupPage() {
       else setFormError(err.message);
     } finally {
       setBusy(false);
-    }
-  };
-
-  const resend = async () => {
-    if (resending || !sentEmail) return;
-    setResending(true);
-    try {
-      await auth.resendVerification(sentEmail);
-      setResent(true);
-    } catch {
-      setFormError("Couldn't resend the link. Try again shortly.");
-    } finally {
-      setResending(false);
     }
   };
 
@@ -273,39 +258,14 @@ export default function SignupPage() {
             </Link>
             <div>
               <h1 className="Nox-display text-[30px] leading-[1.1] font-medium tracking-[-1px] text-ink">
-                {sentEmail ? "Check your inbox" : "Create your account"}
+                Create your account
               </h1>
               <p className="mt-2 text-[15px] leading-[1.3] tracking-[-0.15px] text-ink-muted">
-                {sentEmail
-                  ? `We sent a verification link to ${sentEmail}.`
-                  : "Start fixing real bugs today."}
+                Start fixing real bugs today.
               </p>
             </div>
           </div>
 
-          {sentEmail ? (
-            <div className="flex flex-col gap-4" role="status">
-              <p className="rounded-md bg-surface-1 px-[14px] py-[10px] text-[14px] leading-[1.4] text-ink-muted">
-                Click the link to verify, then log in and finish onboarding.
-                {resent ? " Fresh link just sent." : ""}
-              </p>
-              <button
-                type="button"
-                onClick={resend}
-                disabled={resending}
-                className={`Nox-focus inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-pill border-0 bg-white px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-black disabled:cursor-wait disabled:opacity-70 ${HOVER} ${PRESS}`}
-              >
-                {resending ? "Sending…" : resent ? "Resend link" : "Didn't get it? Resend"}
-              </button>
-              <Link
-                href="/login"
-                className={`Nox-focus inline-flex min-h-[44px] w-full items-center justify-center rounded-pill bg-surface-1 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline hover:bg-surface-2 ${HOVER} ${PRESS}`}
-              >
-                Back to log in
-              </Link>
-            </div>
-          ) : (
-          <>
           <button
             type="button"
             onClick={continueWithGoogle}
@@ -478,8 +438,6 @@ export default function SignupPage() {
               Log in
             </Link>
           </p>
-          </>
-          )}
         </div>
       </main>
     </div>

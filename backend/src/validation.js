@@ -81,6 +81,12 @@ export const verifyEmailSchema = z.object({
   token: z.string().min(1, "Verification token is required."),
 });
 
+/** POST /auth/verify-email — 6-digit code from the signup email. */
+export const verifyOtpSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email address."),
+  otp: z.string().trim().regex(/^[0-9]{6}$/, "Enter the 6-digit code."),
+});
+
 export const forgotPasswordSchema = z.object({
   email: emailSchema,
 });

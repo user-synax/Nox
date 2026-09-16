@@ -185,7 +185,7 @@ After a successful submission, the user can:
 
 - Email/password authentication.
 - Google OAuth (code-complete; enabled by setting `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, no code change needed).
-- Email verification (ENFORCED since 2026-09-16: signup creates the account without a session; login is 403 until verified; pre-enforcement accounts grandfathered via `scripts/grandfather-verified.js`).
+- Email verification via 6-digit OTP (ENFORCED: signup creates the account without a session and emails a 10-minute, 5-attempt, single-use code; login is 403 until verified; pre-enforcement accounts grandfathered via `scripts/grandfather-verified.js`).
 - Session management (7-day DB sessions, daily refresh, 5-minute signed cookie cache).
 - Logout.
 - Password reset (emailed link; same provider as verification).

@@ -75,14 +75,13 @@ check(
   `cookie=${!!created.cookie}`
 );
 
-// Verification links land in the dev outbox (dev fallback in lib/email.js);
-// the token rides as ?token= on the frontend URL — same shape in prod email.
+// Verification codes land in the dev outbox (dev fallback in lib/email.js);
+// same code the prod email carries. 10-minute life, 5-attempt lockout.
 async function verifyEmail(emailAddr) {
   const out = await get(`/auth/dev/outbox?email=${encodeURIComponent(emailAddr)}`);
-  const link = out.json?.items?.find((i) => i.kind === "verify-email")?.url;
-  const token = link ? new URL(link).searchParams.get("token") : null;
-  if (!token) return false;
-  const v = await post("/auth/verify-email", { token });
+  const code = out.json?.items?.find((i) => i.kind === "verify-otp")?.code;
+  if (!code) return false;
+  const v = await post("/auth/verify-email", { email: emailAddr, otp: code });
   return v.status === 200;
 }
 
@@ -116,7 +115,14 @@ const dupEmail = await post("/auth/register", {
 
 const immediateLogin = await post("/auth/login", { email: EMAIL, password: PASS });
 check("login before verification → 403", immediateLogin.status === 403, `got ${immediateLogin.status}`);
-check("verify-email link from outbox verifies", await verifyEmail(EMAIL));
+const outPre = await get(`/auth/dev/outbox?email=${encodeURIComponent(EMAIL)}`);
+const realCode = outPre.json?.items?.find((i) => i.kind === "verify-otp")?.code;
+const wrongCode = await post("/auth/verify-email", {
+  email: EMAIL,
+  otp: realCode === "000000" ? "000001" : "000000",
+});
+check("wrong OTP → 400", wrongCode.status === 400, `got ${wrongCode.status}`);
+check("verify-email code from outbox verifies", await verifyEmail(EMAIL));
 const verifiedLogin = await post("/auth/login", { email: EMAIL, password: PASS });
 check("login works after verification", verifiedLogin.status === 200, `got ${verifiedLogin.status}`);
 
