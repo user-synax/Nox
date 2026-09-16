@@ -118,28 +118,22 @@ export default function LoginPage() {
   useEffect(() => () => clearTimeout(busyTimer.current), []);
 
   /* OAuth return: Google sends failures back here as ?error=. Read it
-     lazily (no effect-state) and surface it above the form. */
-  const [oauthError, setOauthError] = useState(() => {
-    try {
-      if (typeof window === "undefined") return null;
-      const q = new URLSearchParams(window.location.search);
-      return q.get("error")
-        ? { code: q.get("error"), detail: q.get("error_description") }
-        : null;
-    } catch {
-      return null;
-    }
-  });
-
-  /* Strip the OAuth params once — external URL sync, no state. */
+     in an effect (not a lazy initializer) so the first client render
+     matches the server HTML — otherwise React hydration mismatches (#418). */
+  const [oauthError, setOauthError] = useState(null);
   useEffect(() => {
-    if (!oauthError) return;
+    let found = null;
     try {
-      window.history.replaceState(null, "", window.location.pathname);
+      const q = new URLSearchParams(window.location.search);
+      if (q.get("error")) {
+        found = { code: q.get("error"), detail: q.get("error_description") };
+        window.history.replaceState(null, "", window.location.pathname);
+      }
     } catch {
       /* ignore */
     }
-  }, [oauthError]);
+    if (found) setOauthError(found);
+  }, []);
 
   const oauthMessage = oauthError
     ? oauthError.code === "access_denied"
