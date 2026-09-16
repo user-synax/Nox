@@ -1390,10 +1390,13 @@ export default function Home() {
               bug. Fix the code. Prove the fix.
             </p>
             <div className="mt-5 flex items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-pill border border-hairline bg-surface-1 px-3 py-1.5 text-[12px] text-ink-muted">
+              <Link
+                href="/status"
+                className="Nox-focus inline-flex items-center gap-2 rounded-pill border border-hairline bg-surface-1 px-3 py-1.5 text-[12px] text-ink-muted no-underline transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] hover:text-ink"
+              >
                 <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
                 All systems nominal
-              </span>
+              </Link>
             </div>
           </div>
           <nav aria-label="Footer" className="grid grid-cols-2 gap-8 sm:grid-cols-4">
@@ -1401,7 +1404,7 @@ export default function Home() {
               { head: "Product", links: [["Challenges", "/challenges"], ["Leaderboard", "/leaderboard"], ["Daily challenge", "/challenges"], ["Pricing", "/pricing"]] },
               { head: "Account", links: [["Log in", "/login"], ["Sign up", "/signup"], ["Onboarding", "/onboarding"], ["Settings", "/settings"]] },
               { head: "Community", links: [["Solutions", "/challenges"], ["Profiles", "/"], ["Guidelines", "/"], ["Report", "/"]] },
-              { head: "Company", links: [["About", "/"], ["Contact", "/"], ["Security", "/"], ["Status", "/"]] },
+              { head: "Company", links: [["About", "/about"], ["Contact", "/contact"], ["Security", "/security"], ["Status", "/status"]] },
             { head: "Legal", links: [["Terms", "/terms"], ["Privacy", "/privacy"], ["Cookies", "/cookies"]] },
             ].map((col) => (
               <div key={col.head}>

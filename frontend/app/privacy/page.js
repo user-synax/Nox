@@ -82,7 +82,7 @@ const SECTIONS = [
     body: [
       "Depending on where you are and what data we hold, you may have the right to access the personal information we hold about you, correct inaccuracies, request deletion, or restrict our processing.",
       "You may also have the right to data portability for information you provided to us.",
-      "To exercise these rights, contact us at privacy@nox.dev. We will respond within a reasonable time and may need to verify your identity before acting.",
+      "To exercise these rights, contact us at privacy@nox.synax.me. We will respond within a reasonable time and may need to verify your identity before acting.",
       "You can export or delete your account from the Platform settings where the feature is available.",
     ],
   },
@@ -114,7 +114,7 @@ const SECTIONS = [
     num: "12",
     title: "Contact",
     body: [
-      "If you have questions or concerns about this Privacy Policy, contact us at privacy@nox.dev.",
+      "If you have questions or concerns about this Privacy Policy, contact us at privacy@nox.synax.me.",
       "We aim to respond to legitimate privacy inquiries within a few business days.",
     ],
   },

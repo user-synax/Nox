@@ -96,6 +96,17 @@ export const auth = {
   login: ({ email, password }) =>
     request("/auth/login", { method: "POST", body: { email, password } }),
   logout: () => request("/auth/logout", { method: "POST" }),
+  /**
+   * Google OAuth kickoff → { url, redirect }. Redirect the browser to `url`
+   * (Google), which returns to `callbackURL` for returning users,
+   * `newUserCallbackURL` for fresh signups, or `errorCallbackURL` with
+   * ?error= on failure. Full-page redirect — no popup to block.
+   */
+  googleAuthURL: ({ callbackURL, newUserCallbackURL, errorCallbackURL, loginHint } = {}) =>
+    request("/api/auth/sign-in/social", {
+      method: "POST",
+      body: { provider: "google", callbackURL, newUserCallbackURL, errorCallbackURL, loginHint },
+    }),
   me: () => request("/auth/me"),
   verifyEmail: (token) =>
     request("/auth/verify-email", { method: "POST", body: { token } }),

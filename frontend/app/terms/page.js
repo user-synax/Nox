@@ -105,7 +105,7 @@ const SECTIONS = [
     num: "12",
     title: "Contact",
     body: [
-      "If you have questions about these Terms, contact us at legal@nox.dev.",
+      "If you have questions about these Terms, contact us at legal@nox.synax.me.",
       "We aim to respond to legitimate inquiries within a few business days.",
     ],
   },

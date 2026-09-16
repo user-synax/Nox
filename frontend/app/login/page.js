@@ -95,6 +95,7 @@ export default function LoginPage() {
   const [mounted, setMounted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const busyTimer = useRef(null);
 
   const email = useField(validateEmail);
@@ -116,10 +117,67 @@ export default function LoginPage() {
 
   useEffect(() => () => clearTimeout(busyTimer.current), []);
 
+  /* OAuth return: Google sends failures back here as ?error=. Read it
+     lazily (no effect-state) and surface it above the form. */
+  const [oauthError, setOauthError] = useState(() => {
+    try {
+      if (typeof window === "undefined") return null;
+      const q = new URLSearchParams(window.location.search);
+      return q.get("error")
+        ? { code: q.get("error"), detail: q.get("error_description") }
+        : null;
+    } catch {
+      return null;
+    }
+  });
+
+  /* Strip the OAuth params once — external URL sync, no state. */
+  useEffect(() => {
+    if (!oauthError) return;
+    try {
+      window.history.replaceState(null, "", window.location.pathname);
+    } catch {
+      /* ignore */
+    }
+  }, [oauthError]);
+
+  const oauthMessage = oauthError
+    ? oauthError.code === "access_denied"
+      ? "Google sign-in was cancelled. Try again when you're ready."
+      : oauthError.detail || "Google sign-in couldn't be completed. Try again."
+    : null;
+
+  const continueWithGoogle = async () => {
+    if (busy || googleBusy) return;
+    setFormError(null);
+    setOauthError(null);
+    setGoogleBusy(true);
+    try {
+      const origin = window.location.origin;
+      const hint = email.value.trim();
+      const { url } = await auth.googleAuthURL({
+        callbackURL: `${origin}/dashboard`,
+        newUserCallbackURL: `${origin}/onboarding`,
+        errorCallbackURL: `${origin}/login`,
+        ...(EMAIL_RE.test(hint) ? { loginHint: hint } : {}),
+      });
+      if (url) {
+        window.location.href = url;
+        return;
+      }
+      setFormError("Couldn't reach Google. Try again.");
+    } catch (err) {
+      setFormError(err?.message ?? "Couldn't reach Google. Try again.");
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
+
   const onSubmit = async (e) => {
     e.preventDefault();
     if (busy) return;
     setFormError(null);
+    setOauthError(null);
     let firstBad = null;
     const checks = [
       [email, validateEmail, emailRef],
@@ -220,15 +278,16 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <Link
-            href="#"
-            onClick={(e) => e.preventDefault()}
-            aria-label="Continue with Google (coming soon)"
-            className={`Nox-focus flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-pill bg-surface-1 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink no-underline hover:bg-surface-2 ${HOVER} ${PRESS}`}
+          <button
+            type="button"
+            onClick={continueWithGoogle}
+            disabled={busy || googleBusy}
+            aria-label="Continue with Google"
+            className={`Nox-focus flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2.5 rounded-pill border-0 bg-surface-1 px-[15px] py-[10px] text-[14px] font-medium tracking-[-0.14px] text-ink hover:bg-surface-2 disabled:cursor-wait disabled:opacity-70 ${HOVER} ${PRESS}`}
           >
             <GoogleMark />
-            Continue with Google
-          </Link>
+            {googleBusy ? "Connecting…" : "Continue with Google"}
+          </button>
 
           <div className="my-6 flex items-center gap-3" aria-hidden="true">
             <span className="h-px flex-1 bg-hairline-soft" />
@@ -239,13 +298,13 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
-            {formError ? (
+            {formError ?? oauthMessage ? (
               <p
                 role="alert"
                 className="rounded-md bg-surface-1 px-[14px] py-[10px] text-[14px] leading-[1.4] text-danger"
                 style={{ boxShadow: "var(--shadow-ring-error)" }}
               >
-                {formError}
+                {formError ?? oauthMessage}
               </p>
             ) : null}
             {unverified ? (

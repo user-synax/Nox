@@ -10,7 +10,7 @@
 ## What's already on the app
 
 ### Core loop (working)
-- **Auth:** email/password (Better Auth), Google OAuth code-complete (enabled by env, credentials being configured), sessions (7-day DB, daily refresh, 5-min cookie cache), logout, email verification ENFORCED (Resend via `RESEND_API_KEY`, dev-outbox fallback; signup → check-inbox → verify → onboarding; login offers resend on 403; pre-enforcement accounts grandfathered), password reset via emailed link, domain allow-list, rate-limited auth attempts, `make-admin.js` + `grandfather-verified.js` scripts.
+- **Auth:** email/password (Better Auth), Google OAuth live (enabled by env; login/signup carry working "Continue with Google" buttons, OAuth signups get a derived permanent handle, fresh users land in onboarding), sessions (7-day DB, daily refresh, 5-min cookie cache), logout, email verification ENFORCED (Resend via `RESEND_API_KEY`, dev-outbox fallback; signup → check-inbox → verify → onboarding; login offers resend on 403; pre-enforcement accounts grandfathered), password reset via emailed link, domain allow-list, rate-limited auth attempts, `make-admin.js` + `grandfather-verified.js` scripts.
 - **User profiles:** public `/u/[username]` pages (stats, languages/interests, solutions, activity tabs); own-profile edit + `/settings` page, avatar upload (JPEG/PNG/WebP ≤ 2MB via Appwrite), onboarding wizard (3 steps: profile → languages/interests → links).
 - **Challenge catalog:** admin CRUD (ADMIN+, API only — no admin UI), publish/unpublish, hidden-test management, version auto-bump, slugs, tags, difficulty, category (all 8 incl. `newbies`), kind (`bug-fix`, `logic-error`, `runtime-error`, `api-bug`), time/memory limits, starter files, visible + hidden tests, testContext injection, entry file + entry function.
 - **Solving flow:** `/challenges/[slug]/solve` — Monaco editor (Nox-dark theme), multi-file tab switching, autosave drafts to IndexedDB, reset-to-starter, run visible tests (POST `/challenges/:id/run` → 202 `{runId}`), submit for hidden judging (POST `/challenges/:id/submit` → 202 `{submissionId}`), poll for verdict, score/XP/rating breakdown UI, solved-state read-only lock, share-solution deep link.
@@ -25,7 +25,7 @@
 - Dark-canvas design system, Geist + Inter fonts, transitions-dev-style panel reveals, tab pills, sidebar (lg) + mobile top bar + bottom tab bar.
 - Landing page built: hero, interactive broken/fixed demo, how-it-works, example challenge, scoring, progression, profiles, community, FAQ.
 - Challenge discovery: `/challenges` catalog (Recommended/All/Newest/Trending, search + filters + pagination) and `/challenges/[slug]` overview (description, starter code, visible tests, solved-gated solutions tab).
-- Auth pages (login/signup) with field-level shake errors, domain allow-list, Google button stub (disabled until OAuth live).
+- Auth pages (login/signup) with field-level shake errors, domain allow-list, working Google OAuth button.
 
 ---
 
@@ -140,11 +140,10 @@ These are ordered roughly by dependency and upside. Each has a short "why" and a
 - Smoke covers the full loop: register → 403 login → outbox verify → 200 login; duplicate-email documents the no-op-200 anti-enumeration behavior.
 - Remaining ops: verify `nox.synax.me` in Resend and set `RESEND_API_KEY` in the production env.
 
-### 13. Google OAuth activation + future GitHub OAuth
-**Why:** Google OAuth config is in place (conditional on `GOOGLE_CLIENT_ID`/`SECRET`), and the frontend has Google buttons (stubbed "coming soon"). GitHub OAuth is listed as a future auth method in PRD §5.
+### 13. Google OAuth live + future GitHub OAuth
+**Why:** Google OAuth is live (enabled by `GOOGLE_CLIENT_ID`/`SECRET` in env): login/signup carry working "Continue with Google" buttons, OAuth signups get a derived permanent handle in the auth hook, fresh users land in onboarding via `newUserCallbackURL`, and existing password users link by verified email automatically. GitHub OAuth is listed as a future auth method in PRD §5.
 
 **Shape:**
-- Set Google credentials in env → OAuth comes live with no code changes.
 - Add GitHub OAuth as a social provider later (PRD §5 future), link by verified email (account linking already enabled for google).
 
 ### 14. Admin experience: challenge list UI + daily challenge admin

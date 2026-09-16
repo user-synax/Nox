@@ -180,10 +180,10 @@ export default function CookiesPage() {
             technologies on the Platform. It works together with our Privacy
             Policy. If you have questions, contact us at{" "}
             <Link
-              href="mailto:privacy@nox.dev"
+              href="mailto:privacy@nox.synax.me"
               className="Nox-focus underline text-accent-blue hover:text-white"
             >
-              privacy@nox.dev
+              privacy@nox.synax.me
             </Link>
             .
           </p>

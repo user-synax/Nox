@@ -521,7 +521,7 @@ Immutable once judged. Locks `challengeVersion`; `files[]` is the source snapsho
 | Route | Page | Description |
 |-------|------|-------------|
 | `/` | Landing | Hero, live broken/fixed demo, how-it-works, scoring, progression, FAQ |
-| `/login` | Login | Email/password form (Google button disabled stub) |
+| `/login` | Login | Email/password form + Continue with Google |
 | `/signup` | Signup | Registration form |
 | `/forgot-password` | Forgot Password | Email input |
 | `/reset-password` | Reset Password | New password form |

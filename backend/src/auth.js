@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import { APIError } from "better-auth/api";
@@ -11,14 +12,44 @@ import { defaultProfileStats } from "./lib/stats.js";
 import { sendEmail, verifyEmailHtml, resetPasswordHtml } from "./lib/email.js";
 
 /**
- * Better Auth instance — email/password today, Google config-ready.
- * Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET to enable Google OAuth
- * (no code changes needed).
+ * Handle base for an OAuth signup (Google sends no username): prefer the
+ * profile name, fall back to the email local part, sanitized to the
+ * username alphabet. Usernames are immutable, so this must be decent on
+ * the first try — "Ayush Sharma" → ayush_sharma, "ayush@gmail" → ayush.
+ */
+function socialUsernameBase(name, email) {
+  const raw = name || String(email ?? "").split("@")[0] || "debugger";
+  const clean = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 15);
+  return clean.length >= 3 ? clean : "debugger";
+}
+
+/** First free handle: base, base_2 … base_10, then a random fallback. */
+async function uniqueUsername(db, base) {
+  for (let i = 0; i < 10; i++) {
+    const suffix = i === 0 ? "" : `_${i + 1}`;
+    const candidate = base.slice(0, 20 - suffix.length) + suffix;
+    const taken = await db
+      .collection("user")
+      .findOne({ username: candidate }, { projection: { _id: 1 } });
+    if (!taken) return candidate;
+  }
+  return `user_${randomBytes(4).toString("hex")}`;
+}
+
+/**
+ * Better Auth instance — email/password + Google OAuth (enabled when
+ * GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are set).
  *
  * Email delivery: Resend when RESEND_API_KEY is set, dev-outbox fallback
- * otherwise (dev only). Verification is ENFORCED — signup creates the
- * account without a session; login is 403 until the email is verified.
- * Pre-enforcement accounts were grandfathered (scripts/grandfather-verified.js).
+ * otherwise (dev only). Verification is ENFORCED for password accounts —
+ * signup creates the account without a session; login is 403 until the
+ * email is verified. OAuth emails are provider-verified, so Google
+ * sign-ins skip that gate. Pre-enforcement accounts were grandfathered
+ * (scripts/grandfather-verified.js).
  *
  * PRD §28 User model mapping:
  *   Better Auth core → email, emailVerified, name (= displayName), image,
@@ -27,7 +58,7 @@ import { sendEmail, verifyEmailHtml, resetPasswordHtml } from "./lib/email.js";
  *                      bio, website, githubUrl, avatarUrl,
  *                      roles (default ["USER"]; USER/MODERATOR/ADMIN/FOUNDER)
  *
- * PRD §5 Auth required: email/pass, Google (dormant), verification,
+ * PRD §5 Auth required: email/pass, Google, verification,
  * sessions (7d), logout, password reset, brute-force protection (§35/§37).
  */
 export function createAuth(db) {
@@ -86,7 +117,7 @@ export function createAuth(db) {
     },
 
     account: {
-      // When Google is enabled later, link by verified email automatically.
+      // Google links by verified email automatically.
       accountLinking: { enabled: true, trustedProviders: ["google"] },
     },
 
@@ -136,15 +167,26 @@ export function createAuth(db) {
           async before(user) {
             // Domain gate, enforced server-side even though the Zod
             // aliases check it first (Better Auth validates email itself
-            // before hooks run, without knowing our allowlist).
+            // before hooks run, without knowing our allowlist). Applies to
+            // OAuth too — gmail.com (the Google consumer domain) passes.
             if (!emailDomainAllowed(user.email ?? "")) {
               throw new APIError("UNPROCESSABLE_ENTITY", {
                 message: `Use an email from: ${ALLOWED_EMAIL_DOMAINS.join(", ")}.`,
               });
             }
+            // OAuth profiles (Google) carry no username — derive a
+            // permanent, human-readable handle (usernames are immutable)
+            // instead of failing the signup.
+            const username =
+              user.username ??
+              (await uniqueUsername(
+                db,
+                socialUsernameBase(user.name, user.email)
+              ));
             const parsed = signupExtraSchema.safeParse({
-              username: user.username,
-              displayName: user.displayName ?? user.name,
+              username,
+              // Google names can exceed our 40-char cap — trim, don't fail.
+              displayName: (user.displayName ?? user.name ?? "").trim().slice(0, 40) || undefined,
             });
             if (!parsed.success) {
               throw new APIError("UNPROCESSABLE_ENTITY", {
@@ -168,6 +210,12 @@ export function createAuth(db) {
                 displayName,
                 // Keep core `name` in sync — it's what sessions expose.
                 name: displayName,
+                // Adopt the provider photo when the account has none
+                // (external URL only — no avatarFileId, so avatar
+                // replace/delete keeps working untouched).
+                ...(user.avatarUrl ?? user.image
+                  ? { avatarUrl: user.avatarUrl ?? user.image }
+                  : {}),
                 roles: user.roles ?? ["USER"],
               },
             };
@@ -193,7 +241,7 @@ export function createAuth(db) {
       },
     },
 
-    // Google OAuth — dormant until credentials are configured (PRD §5 future).
+    // Google OAuth — live when credentials are configured (PRD §5).
     ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
       ? {
           socialProviders: {
