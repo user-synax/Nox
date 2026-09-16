@@ -273,6 +273,99 @@
   }
 }
 
+/* Nox mobile tab bar — 4-tab sizing on top of transitions-dev 16-tabs-sliding.
+   The .t-tabs / .t-tab / .t-tabs-pill rules above stay verbatim and own the
+   tween (var(--tabs-dur) / var(--tabs-ease)); these overrides only resize the
+   bar for a bottom-nav footprint and style the active state via [data-active]
+   (aria-current carries semantics — aria-selected is invalid on plain links).
+   The More sheet reuses .t-dropdown (05) verbatim; .Nox-more-sheet only skins
+   the surface. The Menu glyph reuses .t-icon-swap (09) verbatim. */
+.Nox-tabbar {
+  display: flex;
+  width: 100%;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px 8px 6px;
+  border-radius: 0;
+}
+.Nox-tabbar .t-tab {
+  flex: 1 1 0%;
+  min-width: 0;
+  height: auto;
+  min-height: 58px;
+  padding: 7px 4px 8px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 11px;
+  text-decoration: none;
+}
+.Nox-tabbar .t-tab[data-active="true"] {
+  color: var(--tabs-text-active);
+}
+.Nox-tabbar .t-tabs-pill {
+  top: 4px;
+  height: calc(100% - 10px);
+  border-radius: 14px;
+}
+.Nox-tabbar-icon {
+  display: inline-flex;
+  transition:
+    transform var(--tabs-dur) var(--tabs-ease),
+    color var(--tabs-dur) var(--tabs-ease);
+}
+.Nox-tabbar .t-tab[data-active="true"] .Nox-tabbar-icon {
+  transform: translateY(-1px) scale(1.1);
+}
+/* The Menu ↔ close glyph reuses .t-icon-swap verbatim — its inline-grid
+   stacking must survive, so it gets its own lift rule instead of sharing
+   .Nox-tabbar-icon (whose inline-flex would unstack the two icons). */
+.Nox-tabbar .t-icon-swap {
+  transition: transform var(--tabs-dur) var(--tabs-ease);
+}
+.Nox-tabbar .t-tab[data-active="true"] .t-icon-swap {
+  transform: translateY(-1px) scale(1.1);
+}
+.Nox-more-sheet {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-hairline-soft);
+  border-radius: 20px;
+  box-shadow: var(--shadow-floating);
+  padding: 6px;
+  z-index: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .Nox-tabbar-icon,
+  .Nox-tabbar .t-icon-swap {
+    transition: none !important;
+  }
+}
+
+/* Scrollable segmented control for long tab sets on narrow screens
+   (e.g. challenge Description / Starter code / Visible tests / Solutions).
+   The verbatim .t-tabs is nowrap with fixed-height tabs, so four long
+   labels shrink-wrap and spill over content below — this opt-in class lets
+   the strip scroll instead, pill measurement (offsetLeft/offsetWidth) is
+   scroll-independent so the slide tween keeps working. */
+.Nox-tabs-scroll {
+  display: flex;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.Nox-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+.Nox-tabs-scroll .t-tab {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* ── transitions-dev 07-panel-reveal.md — verbatim ── */
 .t-panel-slide {
   transform: translateY(var(--panel-translate-y));

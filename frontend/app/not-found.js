@@ -1,5 +1,10 @@
 import Link from "next/link";
 
+const HOVER =
+  "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]";
+const PRESS =
+  "transition-transform duration-[var(--duration-quick)] ease-[var(--ease-smooth-out)] active:scale-[0.97]";
+
 const NOT_FOUND = [
   {
     reason: "A challenge slug that no longer exists",

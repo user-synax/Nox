@@ -3,14 +3,18 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ChevronRight,
   Compass,
   LayoutDashboard,
   LogOut,
+  Menu,
   Settings,
   Trophy,
   User,
   Users,
+  X,
 } from "lucide-react";
 import { auth } from "../lib/auth";
 import { Avatar } from "./Avatar";
@@ -199,43 +203,242 @@ export function MobileTop({ user }) {
   );
 }
 
-/** Bottom tab bar for <lg — live destinations only. */
+/**
+ * Bottom tab bar for <lg — 4 tabs so the bar never crowds.
+ * Home / Challenges / Ranks link; Menu owns Community / Profile / Settings
+ * in a dropdown sheet (transitions-dev 05). The active pill slides between
+ * tabs (transitions-dev 16) and the Menu icon cross-fades to a close icon
+ * (transitions-dev 09). Desktop keeps the full sidebar — untouched.
+ */
 export function TabBar({ user, pathname }) {
+  const path = pathname || "";
   const profileHref = user?.username ? `/u/${user.username}` : "/settings";
-  const tabs = [
-    { href: "/dashboard", label: "Home", Icon: LayoutDashboard, active: pathname === "/dashboard" },
-    { href: "/challenges", label: "Challenges", Icon: Compass, active: pathname.startsWith("/challenges") },
-    { href: "/community", label: "Community", Icon: Users, active: pathname.startsWith("/community") },
-    { href: "/leaderboard", label: "Ranks", Icon: Trophy, active: pathname.startsWith("/leaderboard") },
-    { href: profileHref, label: "Profile", Icon: User, active: pathname === profileHref },
-    { href: "/settings", label: "Settings", Icon: Settings, active: pathname === "/settings" },
+
+  const primary = [
+    { href: "/dashboard", label: "Home", Icon: LayoutDashboard, active: path === "/dashboard" },
+    { href: "/challenges", label: "Challenges", Icon: Compass, active: path.startsWith("/challenges") },
+    { href: "/leaderboard", label: "Ranks", Icon: Trophy, active: path.startsWith("/leaderboard") },
   ];
+  const more = [
+    { href: "/community", label: "Community", desc: "Feed and people", Icon: Users, active: path.startsWith("/community") },
+    { href: profileHref, label: "Profile", desc: "Your stats", Icon: User, active: path === profileHref },
+    { href: "/settings", label: "Settings", desc: "Account and prefs", Icon: Settings, active: path === "/settings" },
+  ];
+  const menuActive = more.some((t) => t.active);
+  const activeIndex = primary.findIndex((t) => t.active);
+  const routeIndex = activeIndex !== -1 ? activeIndex : menuActive ? 3 : -1;
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuClosing, setMenuClosing] = useState(false);
+  const pillRef = useRef(null);
+  const itemRefs = useRef([]);
+  const shellRef = useRef(null);
+  const sheetRef = useRef(null);
+  const closeTimer = useRef(null);
+  const firstPaint = useRef(true);
+
+  /* Pill follows the open sheet too, so tapping Menu feels responsive. */
+  const shownIndex = menuOpen || menuClosing ? 3 : routeIndex;
+
+  const movePill = useCallback((index, animate) => {
+    const pill = pillRef.current;
+    const el = itemRefs.current[index];
+    if (!pill) return;
+    if (!el || index < 0) {
+      pill.style.opacity = "0";
+      return;
+    }
+    pill.style.opacity = "1";
+    if (!animate) {
+      const prev = pill.style.transition;
+      pill.style.transition = "none";
+      pill.style.transform = `translateX(${el.offsetLeft}px)`;
+      pill.style.width = `${el.offsetWidth}px`;
+      void pill.offsetWidth;
+      pill.style.transition = prev;
+    } else {
+      pill.style.transform = `translateX(${el.offsetLeft}px)`;
+      pill.style.width = `${el.offsetWidth}px`;
+    }
+  }, []);
+
+  /* Slide on route / sheet change; snap (no transition) on first paint. */
+  useEffect(() => {
+    if (firstPaint.current) {
+      const raf = requestAnimationFrame(() => {
+        movePill(shownIndex, false);
+        firstPaint.current = false;
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+    movePill(shownIndex, true);
+  }, [shownIndex, profileHref, movePill]);
+
+  /* Snap the pill on resize so it never drifts off its tab. */
+  useEffect(() => {
+    const onResize = () => movePill(shownIndex, false);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [shownIndex, movePill]);
+
+  const closeMenu = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    if (!menuOpen && !menuClosing) return;
+    setMenuOpen(false);
+    setMenuClosing(true);
+    const closeMs =
+      parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--dropdown-close-dur")
+      ) || 150;
+    closeTimer.current = setTimeout(() => setMenuClosing(false), closeMs);
+  }, [menuOpen, menuClosing]);
+
+  const openMenu = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setMenuClosing(false);
+    setMenuOpen(true);
+  };
+
+  /* Route change dismisses the sheet instantly — no orphaned popover.
+     Derived-state adjustment during render (no effect, no ref): when the
+     route moves on, the open sheet belongs to the previous page. */
+  const [menuScope, setMenuScope] = useState(path);
+  if (menuScope !== path) {
+    setMenuScope(path);
+    setMenuOpen(false);
+    setMenuClosing(false);
+  }
+
+  /* Outside tap / Escape closes; focus lands on the first sheet row. */
+  useEffect(() => {
+    if (!menuOpen) return;
+    sheetRef.current?.querySelector("a")?.focus({ preventScroll: true });
+    const onDown = (e) => {
+      if (shellRef.current && !shellRef.current.contains(e.target)) closeMenu();
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") closeMenu();
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen, closeMenu]);
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    },
+    []
+  );
+
+  const menuSelected = shownIndex === 3;
+
   return (
     <nav
       aria-label="App navigation"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-hairline-soft bg-canvas/95 backdrop-blur lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div className="grid grid-cols-6 px-2 pt-1">
-        {tabs.map(({ href, label, Icon, active }) => (
-          <Link
-            key={href + label}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            className={`Nox-focus flex flex-col items-center gap-1 rounded-md px-2 py-2 text-[11px] font-medium no-underline ${HOVER} ${
-              active ? "text-ink" : "text-ink-muted hover:text-ink"
-            }`}
+      {menuOpen ? (
+        <button
+          type="button"
+          aria-label="Close menu"
+          tabIndex={-1}
+          onClick={closeMenu}
+          className="fixed inset-0 cursor-default border-0 bg-black/50 p-0"
+        />
+      ) : null}
+      <div ref={shellRef} className="relative">
+        <div
+          ref={sheetRef}
+          id="mobile-more-menu"
+          role="menu"
+          aria-label="More"
+          data-origin="bottom-center"
+          className={`t-dropdown Nox-more-sheet absolute inset-x-3 bottom-[calc(100%+10px)] ${
+            menuOpen ? "is-open" : ""
+          } ${menuClosing ? "is-closing" : ""}`}
+        >
+          {more.map(({ href, label, desc, Icon, active }) => (
+            <Link
+              key={href + label}
+              href={href}
+              role="menuitem"
+              aria-current={active ? "page" : undefined}
+              onClick={closeMenu}
+              className={`Nox-focus flex min-h-[56px] items-center gap-3 rounded-xl px-3 py-2 text-[14px] no-underline ${HOVER} ${
+                active ? "bg-surface-2 text-ink" : "bg-transparent text-ink-muted hover:text-ink"
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-ink"
+              >
+                <Icon size={17} strokeWidth={2} aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1 text-left">
+                <span className="block font-medium tracking-[-0.14px]">{label}</span>
+                <span className="block truncate text-[12px] text-ink-muted">{desc}</span>
+              </span>
+              {active ? (
+                <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-blue" />
+              ) : (
+                <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-ink-muted" />
+              )}
+            </Link>
+          ))}
+        </div>
+
+        <div className="t-tabs Nox-tabbar" aria-label="Primary">
+          <span ref={pillRef} aria-hidden="true" className="t-tabs-pill" style={{ opacity: 0 }} />
+          {primary.map(({ href, label, Icon, active }, i) => (
+            <Link
+              key={href}
+              ref={(el) => {
+                itemRefs.current[i] = el;
+              }}
+              href={href}
+              data-active={active && !menuOpen ? "true" : "false"}
+              aria-current={active ? "page" : undefined}
+              className={`Nox-focus t-tab ${HOVER} ${PRESS}`}
+            >
+              <span aria-hidden="true" className="Nox-tabbar-icon">
+                <Icon size={21} strokeWidth={active && !menuOpen ? 2.25 : 2} aria-hidden="true" />
+              </span>
+              <span className="text-[11px] leading-none font-medium tracking-[-0.11px]">{label}</span>
+            </Link>
+          ))}
+          <button
+            ref={(el) => {
+              itemRefs.current[3] = el;
+            }}
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-controls="mobile-more-menu"
+            aria-current={menuActive ? "page" : undefined}
+            data-active={menuSelected ? "true" : "false"}
+            onClick={() => (menuOpen ? closeMenu() : openMenu())}
+            className={`Nox-focus t-tab cursor-pointer ${HOVER} ${PRESS}`}
           >
             <span
               aria-hidden="true"
-              className={`h-1 w-6 rounded-full transition-colors duration-[var(--duration-fast)] ${
-                active ? "bg-accent-blue" : "bg-transparent"
-              }`}
-            />
-            <Icon size={20} strokeWidth={active ? 2.25 : 2} aria-hidden="true" />
-            {label}
-          </Link>
-        ))}
+              className="t-icon-swap"
+              data-state={menuOpen ? "b" : "a"}
+            >
+              <span className="t-icon" data-icon="a">
+                <Menu size={21} strokeWidth={menuSelected && !menuOpen ? 2.25 : 2} aria-hidden="true" />
+              </span>
+              <span className="t-icon" data-icon="b">
+                <X size={21} strokeWidth={2.25} aria-hidden="true" />
+              </span>
+            </span>
+            <span className="text-[11px] leading-none font-medium tracking-[-0.11px]">Menu</span>
+          </button>
+        </div>
       </div>
     </nav>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Check, FileCode2, FlaskConical, Lightbulb, Lock } from "lucide-react";
 import { auth, LANGUAGES, INTERESTS } from "../../../../lib/auth";
@@ -229,11 +229,34 @@ export default function ChallengeDetailPage({ params }) {
     };
   }, [slug]);
 
+  /* Keep the active tab visible inside the scrollable strip.
+     block:"nearest" never yanks the page — only the strip pans. */
+  const scrollTabIntoView = useCallback((index) => {
+    const el = tabRefs.current[index];
+    if (!el) return;
+    const reduce =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    try {
+      el.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+        behavior: reduce ? "auto" : "smooth",
+      });
+    } catch {
+      /* older engines without smooth scroll — strip stays swipeable */
+    }
+  }, []);
+
   useEffect(() => {
     if (!challenge && !missing && !error) return;
-    const raf = requestAnimationFrame(() => setMounted(true));
+    const raf = requestAnimationFrame(() => {
+      setMounted(true);
+      scrollTabIntoView(tab);
+    });
     return () => cancelAnimationFrame(raf);
-  }, [challenge, missing, error]);
+  }, [challenge, missing, error, tab, scrollTabIntoView]);
 
   const movePill = (index, animate) => {
     const pill = pillRef.current;
@@ -369,8 +392,9 @@ export default function ChallengeDetailPage({ params }) {
         </p>
       </div>
 
-      {/* Tabs */}
-      <div className="t-tabs mt-6" role="tablist" aria-label="Challenge sections">
+      {/* Tabs — scrollable strip on narrow screens so long labels
+          never shrink-wrap and spill over the content below. */}
+      <div className="t-tabs Nox-tabs-scroll mt-6" role="tablist" aria-label="Challenge sections">
         <span ref={pillRef} aria-hidden="true" className="t-tabs-pill" />
           {tabLabels.map((label, i) => (
             <button
@@ -384,6 +408,7 @@ export default function ChallengeDetailPage({ params }) {
             onClick={() => {
               setTab(i);
               movePill(i, true);
+              scrollTabIntoView(i);
             }}
             className="t-tab Nox-focus px-4 text-[14px] font-medium"
           >
