@@ -215,9 +215,9 @@ export default function ChallengeDetailPage({ params }) {
       `challenge:v1:${slug}`,
       () => auth.getChallenge(slug).then((r) => r.challenge),
       (c) => {
-        if (!alive) return;
+        if (!alive || !c) return;
         setChallenge(c);
-        recordRecent(c.slug, c.title);
+        if (c.slug) recordRecent(c.slug, c.title);
       }
     ).catch((err) => {
       if (!alive) return;

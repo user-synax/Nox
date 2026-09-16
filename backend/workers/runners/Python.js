@@ -82,7 +82,7 @@ out({"results": results})
 
 async function runHarness(dir, job, limitMs) {
   await writeFile(join(dir, "_run.py"), HARNESS, "utf8");
-  const Python = process.env.NOX_PYTHON ?? "Python";
+  const Python = process.env.NOX_PYTHON ?? "python3";
   return runCommand({
     // -S skips site.py (stdlib-only challenges don't need it, ~50ms saved),
     // -u keeps stdio unbuffered so timeout kills don't eat trailing output.
