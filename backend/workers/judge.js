@@ -129,10 +129,6 @@ export async function judgeSubmit(db, job, exec) {
   const acceptedCount = set.acceptedCount ?? current.acceptedCount ?? 0;
   const submissionCount = set.submissionCount ?? current.submissionCount ?? 0;
   set.successRate = submissionCount > 0 ? acceptedCount / submissionCount : 0;
-  // $setOnInsert only fires on insert — createdAt included safely.
-  // Strip every $set path: Mongo rejects same-path $set + $setOnInsert.
-  const insertDefaults = defaultProfileStats(userId);
-  for (const k of Object.keys(set)) delete insertDefaults[k];
   const inc = {};
   if (status === "accepted" && xpAwarded > 0) {
     // Per-track XP powers language/category leaderboards (§16).
@@ -144,6 +140,16 @@ export async function judgeSubmit(db, job, exec) {
       if (solveCategory) inc[`solvesByCategory.${solveCategory}`] = 1;
     }
   }
+  // $setOnInsert only fires on insert — createdAt included safely.
+  // Strip every $set path AND every $inc root path: Mongo rejects
+  // conflicting paths across operators even when $setOnInsert ends up a
+  // no-op (e.g. $setOnInsert {xpByLanguage: {}} + $inc
+  // {"xpByLanguage.javascript": n} throws "would create a conflict" and
+  // turns every accepted submit into a system-error). $inc recreates the
+  // maps on insert, so brand-new docs still end up complete.
+  const insertDefaults = defaultProfileStats(userId);
+  for (const k of Object.keys(set)) delete insertDefaults[k];
+  for (const k of Object.keys(inc)) delete insertDefaults[k.split(".")[0]];
   const updateOp = { $set: set, $setOnInsert: insertDefaults };
   if (Object.keys(inc).length > 0) updateOp.$inc = inc;
   await statsCol.updateOne({ userId }, updateOp, { upsert: true });

@@ -60,6 +60,10 @@ export async function connectDB(uri) {
   await db
     .collection("challenges")
     .createIndex({ status: 1, solveCount: -1 }, { name: "challenges_status_popular" });
+  // Daily rotation (routes/daily.js): filter + slug sort + skip(index).
+  await db
+    .collection("challenges")
+    .createIndex({ status: 1, slug: 1 }, { name: "challenges_status_slug" });
 
   // Execution queue (workers/queue.js): claim order + owner history.
   await db

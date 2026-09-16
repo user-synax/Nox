@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronRight, Flame, History, Lock } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, Flame, History, Lock } from "lucide-react";
 import { useAppSession } from "../../../components/SessionScope";
 import { StatNumber } from "../../../components/Stat";
 import {
@@ -10,7 +10,7 @@ import {
   LevelProgress,
   RankBadge,
 } from "../../../components/Leaderboard";
-import { rankFor, rankProgress } from "../../../lib/auth";
+import { auth, rankFor, rankProgress } from "../../../lib/auth";
 import { getRecent } from "../../../lib/workspace";
 
 const HOVER =
@@ -43,6 +43,8 @@ export default function DashboardPage() {
   const { session } = useAppSession();
   const [mounted, setMounted] = useState(false);
   const [recent, setRecent] = useState([]);
+  const [daily, setDaily] = useState(null);
+  const [dailyState, setDailyState] = useState("loading");
   const user = session?.user;
   const stats = session?.stats;
 
@@ -57,6 +59,26 @@ export default function DashboardPage() {
     getRecent(4).then((rows) => {
       if (alive) setRecent(rows);
     });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Daily challenge — one canonical pick per UTC day (GET /daily-challenge).
+  // Solves go through the normal submit flow, so no bonus handling here.
+  useEffect(() => {
+    let alive = true;
+    auth
+      .getDailyChallenge()
+      .then((data) => {
+        if (!alive) return;
+        setDaily(data);
+        setDailyState("ready");
+      })
+      .catch(() => {
+        if (!alive) return;
+        setDailyState("error");
+      });
     return () => {
       alive = false;
     };
@@ -255,22 +277,76 @@ export default function DashboardPage() {
         >
           <div>
             <p className="text-[11px] font-medium tracking-[0.08em] opacity-80">
-              DAILY DEBUG
+              DAILY DEBUG{daily?.date ? ` · ${daily.date}` : ""}
             </p>
-            <h2 className="Nox-display mt-2 text-[24px] leading-[1.1] font-medium tracking-[-0.5px]">
-              Today&apos;s broken code drops soon.
-            </h2>
-            <p className="mt-2 text-[14px] leading-[1.45] opacity-85">
-              One buggy codebase. Hidden tests. Beat the clock — fresh every day.
-            </p>
+            {dailyState === "loading" ? (
+              <div className="mt-2 animate-pulse" aria-label="Loading today's challenge">
+                <div className="h-7 w-3/4 rounded-md bg-white/20" />
+                <div className="mt-2 h-4 w-full rounded bg-white/15" />
+                <div className="mt-1 h-4 w-2/3 rounded bg-white/15" />
+              </div>
+            ) : dailyState === "ready" && daily?.challenge ? (
+              <>
+                <h2 className="Nox-display mt-2 line-clamp-2 text-[24px] leading-[1.1] font-medium tracking-[-0.5px]">
+                  {daily.challenge.title}
+                </h2>
+                <p className="mt-2 text-[14px] leading-[1.45] opacity-85">
+                  {daily.challenge.solved ? (
+                    <>Solved — nice. Review the fix or browse the catalog.</>
+                  ) : (
+                    <>One buggy codebase. Hidden tests. Fresh every day.</>
+                  )}
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {daily.challenge.solved ? (
+                    <span className="inline-flex items-center gap-1 rounded-pill bg-white/20 px-2.5 py-1 text-[12px] font-medium">
+                      <Check size={12} strokeWidth={3} aria-hidden="true" />
+                      Completed
+                    </span>
+                  ) : null}
+                  <span className="rounded-pill bg-white/15 px-2.5 py-1 text-[12px] font-medium capitalize">
+                    {daily.challenge.difficulty}
+                  </span>
+                  <span className="rounded-pill bg-white/15 px-2.5 py-1 text-[12px] font-medium capitalize">
+                    {daily.challenge.language}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="Nox-display mt-2 text-[24px] leading-[1.1] font-medium tracking-[-0.5px]">
+                  Today&apos;s broken code drops soon.
+                </h2>
+                <p className="mt-2 text-[14px] leading-[1.45] opacity-85">
+                  One buggy codebase. Hidden tests. Beat the clock — fresh every day.
+                </p>
+              </>
+            )}
           </div>
-          <span
-            aria-disabled="true"
-            className="mt-6 inline-flex min-h-[44px] w-fit cursor-not-allowed items-center gap-2 rounded-pill bg-white/15 px-5 py-[10px] text-[14px] font-medium opacity-90"
-          >
-            <Lock size={15} aria-hidden="true" />
-            Coming soon
-          </span>
+          {dailyState === "ready" && daily?.challenge ? (
+            <Link
+              href={`/challenges/${daily.challenge.slug}`}
+              className={`Nox-focus mt-6 inline-flex min-h-[44px] w-fit items-center gap-2 rounded-pill bg-white px-5 py-[10px] text-[14px] font-medium text-black no-underline ${HOVER} ${PRESS}`}
+            >
+              {daily.challenge.solved ? "Review today's fix" : "Fix today's bug"}
+              <ArrowRight size={15} aria-hidden="true" />
+            </Link>
+          ) : dailyState === "loading" ? (
+            <span
+              aria-hidden="true"
+              className="mt-6 inline-flex min-h-[44px] w-fit items-center gap-2 rounded-pill bg-white/15 px-5 py-[10px] text-[14px] font-medium opacity-70"
+            >
+              Finding today&apos;s bug…
+            </span>
+          ) : (
+            <Link
+              href="/challenges"
+              className={`Nox-focus mt-6 inline-flex min-h-[44px] w-fit items-center gap-2 rounded-pill bg-white px-5 py-[10px] text-[14px] font-medium text-black no-underline ${HOVER} ${PRESS}`}
+            >
+              Browse challenges
+              <ArrowRight size={15} aria-hidden="true" />
+            </Link>
+          )}
         </section>
       </div>
 

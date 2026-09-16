@@ -1402,6 +1402,7 @@ export default function Home() {
               { head: "Account", links: [["Log in", "/login"], ["Sign up", "/signup"], ["Onboarding", "/onboarding"], ["Settings", "/settings"]] },
               { head: "Community", links: [["Solutions", "/challenges"], ["Profiles", "/"], ["Guidelines", "/"], ["Report", "/"]] },
               { head: "Company", links: [["About", "/"], ["Contact", "/"], ["Security", "/"], ["Status", "/"]] },
+            { head: "Legal", links: [["Terms", "/terms"], ["Privacy", "/privacy"], ["Cookies", "/cookies"]] },
             ].map((col) => (
               <div key={col.head}>
                 <h2 className="text-[13px] font-medium tracking-[-0.13px] text-ink">

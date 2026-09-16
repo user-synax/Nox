@@ -10,6 +10,7 @@ import { createAuth } from "./auth.js";
 import { createAuthRoutes } from "./routes/auth.js";
 import { createUserRoutes } from "./routes/users.js";
 import { createChallengeRoutes } from "./routes/challenges.js";
+import { createDailyRoutes } from "./routes/daily.js";
 import { createAdminRoutes } from "./routes/admin.js";
 import { createRunRoutes } from "./routes/runs.js";
 import { createSubmissionRoutes } from "./routes/submissions.js";
@@ -77,9 +78,11 @@ app.use("/api", createAuthRoutes(auth, db));
 app.use(createUserRoutes(auth, db));
 app.use("/api", createUserRoutes(auth, db));
 
-// Challenge catalog (public) + challenge admin (ADMIN+, PRD §22).
+// Challenge catalog (public) + daily challenge (PRD §18) + admin (ADMIN+, PRD §22).
 app.use(createChallengeRoutes(auth, db));
 app.use("/api", createChallengeRoutes(auth, db));
+app.use(createDailyRoutes(auth, db));
+app.use("/api", createDailyRoutes(auth, db));
 app.use(createAdminRoutes(auth, db));
 app.use("/api", createAdminRoutes(auth, db));
 
