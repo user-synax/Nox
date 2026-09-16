@@ -6,8 +6,9 @@
  * session cookie set on register-verify/login flows along automatically.
  */
 
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+export const API_BASE = (
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"
+).replace(/\/+$/, "");
 
 /**
  * Allowed email domains (anti-spam gate).
