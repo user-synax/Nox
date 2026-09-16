@@ -5,19 +5,25 @@ import { auth } from "./auth";
 
 /**
  * Session hook — fresh user + stats from GET /users/me.
- * { session: { user, stats } | null, loading, refresh }
- * 401 (signed out) resolves to null, not an error.
+ * { session: { user, stats } | null, loading, error, refresh }
+ * 401 (signed out) resolves to null + error.status 401.
+ * Network/CORS failures keep error without status — caller must NOT
+ * treat them as signed out (see (app)/layout.js).
  */
 export function useSession() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const refresh = useCallback(async () => {
+    setLoading(true);
     try {
       const data = await auth.meFull();
       setSession(data);
-    } catch {
+      setError(null);
+    } catch (e) {
       setSession(null);
+      setError(e);
     } finally {
       setLoading(false);
     }
@@ -28,9 +34,15 @@ export function useSession() {
     (async () => {
       try {
         const data = await auth.meFull();
-        if (alive) setSession(data);
-      } catch {
-        if (alive) setSession(null);
+        if (alive) {
+          setSession(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (alive) {
+          setSession(null);
+          setError(e);
+        }
       } finally {
         if (alive) setLoading(false);
       }
@@ -40,5 +52,5 @@ export function useSession() {
     };
   }, []);
 
-  return { session, loading, refresh };
+  return { session, loading, error, refresh };
 }

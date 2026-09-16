@@ -39,13 +39,38 @@ function ShellSkeleton() {
 export default function AppLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { session, loading, refresh } = useSession();
+  const { session, loading, error, refresh } = useSession();
 
   useEffect(() => {
-    if (!loading && !session) signOutAndLogin(router);
-  }, [loading, session, router]);
+    // Only bounce to /login on a real 401. CORS / network failures have
+    // no status (fetch throws) — treating them as "signed out" is what
+    // made Ctrl+Shift+R look like a logout when the API CORS was stale.
+    if (!loading && !session && error?.status === 401) signOutAndLogin(router);
+  }, [loading, session, error, router]);
 
-  if (loading || !session) return <ShellSkeleton />;
+  if (loading) return <ShellSkeleton />;
+  if (!session) {
+    // Network/CORS — don't log out, let the user retry once the API is redeployed.
+    if (error && error.status !== 401) {
+      return (
+        <div className="min-h-screen bg-canvas lg:pl-[248px]">
+          <div className="mx-auto w-full max-w-[1200px] px-5 pt-10 sm:px-8">
+            <p className="text-[14px] leading-5 text-danger">
+              Can&apos;t reach the API ({error?.message ?? "network error"}). Check Render CORS / FRONTEND_URL and retry.
+            </p>
+            <button
+              type="button"
+              onClick={refresh}
+              className="Nox-focus mt-4 inline-flex min-h-[36px] items-center rounded-pill bg-white px-4 text-[14px] font-medium text-black"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return <ShellSkeleton />;
+  }
 
   return (
     <SessionContext.Provider value={{ session, loading: false, refresh }}>
