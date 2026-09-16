@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { ObjectId } from "mongodb";
 import { RANKS, XP_TABLE, rankFor } from "../../workers/scoring.js";
-import { toWebHeaders } from "./auth.js";
+import { getSessionUser } from "../lib/session.js";
 
 /**
  * Leaderboards (PRD §16) — public reads, computed from durable state.
@@ -80,16 +80,12 @@ async function withUsers(db, statsRows, mapEntry) {
 }
 
 /** Best-effort session user id (null when anonymous) — never throws. */
-async function sessionUserId(auth, req) {
-  try {
-    const session = await auth.api.getSession({ headers: toWebHeaders(req) });
-    return session?.user?.id ? String(session.user.id) : null;
-  } catch {
-    return null;
-  }
+async function sessionUserId(db, req) {
+  const found = await getSessionUser(db, req);
+  return found ? String(found.user._id) : null;
 }
 
-export function createLeaderboardRoutes(auth, db) {
+export function createLeaderboardRoutes(db) {
   const router = Router();
 
   // ── Global: competitive rating ladder ──────────────────────────
@@ -295,7 +291,7 @@ export function createLeaderboardRoutes(auth, db) {
   // ── Me: the caller's position on any board ─────────────────────
   router.get("/leaderboard/me", async (req, res) => {
     try {
-      const meId = await sessionUserId(auth, req);
+      const meId = await sessionUserId(db, req);
       if (!meId) return res.status(401).json({ error: "Not signed in." });
       const type = String(req.query.type ?? "global").toLowerCase();
       if (!LEADERBOARD_TYPES.includes(type)) {

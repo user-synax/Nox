@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { ObjectId } from "mongodb";
 import { validate } from "../middleware/validate.js";
-import { toWebHeaders } from "./auth.js";
+import { getSessionUser } from "../lib/session.js";
 import { challengeListQuerySchema } from "../validation.js";
 
 /**
@@ -35,13 +35,9 @@ function withRate(doc, solved) {
 }
 
 /** Session user id (null when anonymous) — best-effort, never throws. */
-async function sessionUserId(auth, req) {
-  try {
-    const session = await auth.api.getSession({ headers: toWebHeaders(req) });
-    return session?.user?.id ? new ObjectId(session.user.id) : null;
-  } catch {
-    return null;
-  }
+async function sessionUserId(db, req) {
+  const found = await getSessionUser(db, req);
+  return found ? found.user._id : null;
 }
 
 /** Accepted submissions for (user × challenges) → solved lookup map. */
@@ -84,7 +80,7 @@ function recommendScore(doc, prefs) {
   return score;
 }
 
-export function createChallengeRoutes(auth, db) {
+export function createChallengeRoutes(db) {
   const router = Router();
   const challenges = () => db.collection("challenges");
 
@@ -105,22 +101,21 @@ export function createChallengeRoutes(auth, db) {
 
       let prefs = { languages: [], interests: [] };
       let userId = null;
-      try {
-        const session = await auth.api.getSession({ headers: toWebHeaders(req) });
-        if (session?.user?.id) {
-          userId = new ObjectId(session.user.id);
+      {
+        // Best-effort: anonymous users get trending-flavored recommendations.
+        const found = await getSessionUser(db, req);
+        if (found) {
+          userId = found.user._id;
           if (q.sort === "recommended") {
             const stats = await db
               .collection("profileStats")
-              .findOne({ userId: session.user.id });
+              .findOne({ userId: found.user._id.toString() });
             prefs = {
               languages: stats?.preferredLanguages ?? [],
-              interests: session.user.interests ?? [],
+              interests: found.user.interests ?? [],
             };
           }
         }
-      } catch {
-        /* anonymous: trending-flavored recommendation */
       }
 
       const scored = docs.map((d) => ({ doc: d, score: 0 }));
@@ -165,7 +160,7 @@ export function createChallengeRoutes(auth, db) {
     try {
       const doc = await challenges().findOne({ slug, status: "published" });
       if (!doc) return res.status(404).json({ error: "Challenge not found." });
-      const userId = await sessionUserId(auth, req);
+      const userId = await sessionUserId(db, req);
       const solvedBy = await acceptedMap(db, userId, [doc._id]);
       const solved = solvedBy.get(doc._id.toString()) ?? null;
       const challenge = withRate(stripHidden(doc), solved);

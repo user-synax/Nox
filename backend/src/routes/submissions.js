@@ -2,7 +2,7 @@ import { Router } from "express";
 import { ObjectId } from "mongodb";
 import { validate } from "../middleware/validate.js";
 import { authRateLimit } from "../middleware/rateLimit.js";
-import { toWebHeaders } from "./auth.js";
+import { getSessionUser } from "../lib/session.js";
 import { runRequestSchema, EXECUTABLE_LANGUAGES } from "../validation.js";
 import { mergeChallengeFiles, findPublishedChallenge, findAcceptedSubmission } from "../lib/challengeFiles.js";
 import { createRun } from "../../workers/queue.js";
@@ -19,18 +19,13 @@ import { createRun } from "../../workers/queue.js";
  * exactly once; submissions are never mutated afterwards.
  */
 
-async function requireUserId(auth, req, res) {
-  try {
-    const session = await auth.api.getSession({ headers: toWebHeaders(req) });
-    if (!session?.user?.id) {
-      res.status(401).json({ error: "Not signed in." });
-      return null;
-    }
-    return { id: new ObjectId(session.user.id), roles: session.user.roles ?? [] };
-  } catch {
+async function requireUserId(db, req, res) {
+  const found = await getSessionUser(db, req, res);
+  if (!found) {
     res.status(401).json({ error: "Not signed in." });
     return null;
   }
+  return { id: found.user._id, roles: found.user.roles ?? [] };
 }
 
 function isAdmin(roles) {
@@ -48,7 +43,7 @@ export function sanitizeSubmission(doc) {
   };
 }
 
-export function createSubmissionRoutes(auth, db) {
+export function createSubmissionRoutes(db) {
   const router = Router();
   const submissions = () => db.collection("submissions");
 

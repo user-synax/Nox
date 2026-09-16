@@ -1,5 +1,6 @@
 import { Server } from "socket.io";
 import { env } from "../env.js";
+import { getSessionUser } from "./session.js";
 
 /**
  * Realtime fan-out (PRD §25) — live solution likes/comments (§19).
@@ -24,7 +25,7 @@ export function roomForSolution(solutionId) {
   return `solution:${String(solutionId)}`;
 }
 
-export function initRealtime(httpServer, auth) {
+export function initRealtime(httpServer, db) {
   const io = new Server(httpServer, {
     cors: { origin: [env.FRONTEND_URL], credentials: true },
   });
@@ -34,8 +35,8 @@ export function initRealtime(httpServer, auth) {
     try {
       const cookie = socket.handshake.headers.cookie ?? "";
       if (!cookie) return next();
-      const session = await auth.api.getSession({ headers: new Headers({ cookie }) });
-      if (session?.user?.id) socket.data.userId = String(session.user.id);
+      const found = await getSessionUser(db, { headers: { cookie } });
+      if (found) socket.data.userId = String(found.user._id);
     } catch {
       /* anonymous: live reads only */
     }

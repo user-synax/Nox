@@ -2,7 +2,7 @@ import { Router } from "express";
 import { ObjectId } from "mongodb";
 import { validate } from "../middleware/validate.js";
 import { strictAuthLimit } from "../middleware/rateLimit.js";
-import { toWebHeaders } from "./auth.js";
+import { getSessionUser } from "../lib/session.js";
 import { runRequestSchema, EXECUTABLE_LANGUAGES } from "../validation.js";
 import { mergeChallengeFiles, findAcceptedSubmission } from "../lib/challengeFiles.js";
 import { createRun, getRun, sanitizeRun } from "../../workers/queue.js";
@@ -19,25 +19,20 @@ import { createRun, getRun, sanitizeRun } from "../../workers/queue.js";
  * Hidden tests are never attached to runs (submit milestone owns those).
  */
 
-async function requireUserId(auth, req, res) {
-  try {
-    const session = await auth.api.getSession({ headers: toWebHeaders(req) });
-    if (!session?.user?.id) {
-      res.status(401).json({ error: "Not signed in." });
-      return null;
-    }
-    return { id: new ObjectId(session.user.id), roles: session.user.roles ?? [] };
-  } catch {
+async function requireUserId(db, req, res) {
+  const found = await getSessionUser(db, req, res);
+  if (!found) {
     res.status(401).json({ error: "Not signed in." });
     return null;
   }
+  return { id: found.user._id, roles: found.user.roles ?? [] };
 }
 
 function isAdmin(roles) {
   return Array.isArray(roles) && roles.some((r) => r === "ADMIN" || r === "FOUNDER");
 }
 
-export function createRunRoutes(auth, db) {
+export function createRunRoutes(db) {
   const router = Router();
   const challenges = () => db.collection("challenges");
 

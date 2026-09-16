@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { ACHIEVEMENTS, ACHIEVEMENT_XP } from "../../workers/achievements.js";
-import { toWebHeaders } from "./auth.js";
+import { getSessionUser } from "../lib/session.js";
 
 /**
  * Achievement catalog (PRD §6) — backend-owned definitions.
@@ -37,18 +37,15 @@ export async function unlockedEntries(db, userId) {
   }
 }
 
-export function createAchievementRoutes(auth, db) {
+export function createAchievementRoutes(db) {
   const router = Router();
 
   router.get("/achievements", async (req, res) => {
     try {
       let unlocked = [];
-      try {
-        const session = await auth.api.getSession({ headers: toWebHeaders(req) });
-        if (session?.user?.id) unlocked = await unlockedKeys(db, session.user.id);
-      } catch {
-        /* anonymous: catalog only */
-      }
+      // Best-effort: anonymous users get the catalog only.
+      const found = await getSessionUser(db, req);
+      if (found) unlocked = await unlockedKeys(db, found.user._id.toString());
       return res.json({
         achievements: ACHIEVEMENTS.map((a) => ({ ...a, xp: ACHIEVEMENT_XP })),
         unlocked,

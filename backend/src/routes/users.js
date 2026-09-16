@@ -3,7 +3,8 @@ import multer from "multer";
 import { ObjectId } from "mongodb";
 import { validate } from "../middleware/validate.js";
 import { authRateLimit, strictAuthLimit } from "../middleware/rateLimit.js";
-import { sanitizeUser, toWebHeaders } from "./auth.js";
+import { sanitizeUser } from "./auth.js";
+import { getSessionUser } from "../lib/session.js";
 import {
   profileUpdateSchema,
   AVATAR_MAX_BYTES,
@@ -126,22 +127,17 @@ async function applyProfileUpdate(db, userId, data) {
   return { userDoc, statsDoc };
 }
 
-export function createUserRoutes(auth, db) {
+export function createUserRoutes(db) {
   const router = Router();
 
   /** Session → user ObjectId, or null after a 401. */
   async function requireUserId(req, res) {
-    try {
-      const session = await auth.api.getSession({ headers: toWebHeaders(req) });
-      if (!session?.user?.id) {
-        res.status(401).json({ error: "Not signed in." });
-        return null;
-      }
-      return new ObjectId(session.user.id);
-    } catch {
+    const found = await getSessionUser(db, req, res);
+    if (!found) {
       res.status(401).json({ error: "Not signed in." });
       return null;
     }
+    return found.user._id;
   }
 
   router.get("/users/me", async (req, res) => {

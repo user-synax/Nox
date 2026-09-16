@@ -60,13 +60,13 @@ const VERSIONED_KEYS = new Set([
   "testContext",
 ]);
 
-export function createAdminRoutes(auth, db) {
+export function createAdminRoutes(db) {
   const router = Router();
   const challenges = () => db.collection("challenges");
 
   // Scoped to /admin: a bare router.use() would run the guard for every
   // request falling through this router (including /api/health below).
-  router.use("/admin", withAuth(auth), requireAdmin());
+  router.use("/admin", withAuth(db), requireAdmin());
 
   router.get("/admin/challenges", async (_req, res) => {
     try {
@@ -92,7 +92,7 @@ export function createAdminRoutes(auth, db) {
         ...data,
         slug,
         tags: [...new Set(data.tags)],
-        authorId: req.sessionUser.id,
+        authorId: req.sessionUser._id,
         version: 1,
         solveCount: 0,
         attemptCount: 0,

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { ObjectId } from "mongodb";
-import { toWebHeaders } from "./auth.js";
+import { getSessionUser } from "../lib/session.js";
 
 /**
  * Daily challenge — one canonical challenge per day (PRD §18).
@@ -64,16 +64,12 @@ function withRate(doc, solved) {
 }
 
 /** Session user id (null when anonymous) — best-effort, never throws. */
-async function sessionUserId(auth, req) {
-  try {
-    const session = await auth.api.getSession({ headers: toWebHeaders(req) });
-    return session?.user?.id ? new ObjectId(session.user.id) : null;
-  } catch {
-    return null;
-  }
+async function sessionUserId(db, req) {
+  const found = await getSessionUser(db, req);
+  return found ? found.user._id : null;
 }
 
-export function createDailyRoutes(auth, db) {
+export function createDailyRoutes(db) {
   const router = Router();
   const challenges = () => db.collection("challenges");
 
@@ -112,7 +108,7 @@ export function createDailyRoutes(auth, db) {
       const doc = docs[0];
       if (!doc) return res.status(404).json({ error: "No challenges published yet." });
 
-      const userId = await sessionUserId(auth, req);
+      const userId = await sessionUserId(db, req);
       let solved = null;
       if (userId) {
         const accepted = await db.collection("submissions").findOne(

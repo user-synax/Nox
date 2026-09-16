@@ -154,6 +154,9 @@ check("wrong password → 401", wrongPass.status === 401, `got ${wrongPass.statu
 const login = await post("/auth/login", { email: EMAIL, password: PASS });
 check("login succeeds", login.status === 200, `got ${login.status} ${JSON.stringify(login.json)}`);
 
+const resend = await post("/api/auth/send-verification-email", { email: EMAIL, callbackURL: "/" });
+check("resend endpoint always 200", resend.status === 200, `got ${resend.status}`);
+
 const me = await fetch(`${BASE}/auth/me`, {
   headers: login.cookie ? { Cookie: login.cookie } : {},
 }).then((r) => r.json());
@@ -247,13 +250,11 @@ check(
 const forgot = await post("/auth/forgot-password", { email: EMAIL });
 check("forgot-password generic success", forgot.status === 200 && forgot.json?.status === true, `got ${forgot.status}`);
 
-// Reset link → 302 to frontend with ?token= → POST alias consumes it.
+// Reset link is the frontend URL itself (?token=) — parse it directly.
 const outbox2 = await get(`/auth/dev/outbox?email=${encodeURIComponent(EMAIL)}`);
 const resetUrl = outbox2.json?.items?.find((i) => i.kind === "password-reset")?.url;
-const resetRes = resetUrl ? await fetch(resetUrl, { redirect: "manual" }) : null;
-const location = resetRes?.headers.get("location");
-const resetToken = location ? new URL(location).searchParams.get("token") : null;
-check("reset link redirects with token", !!resetToken, location ?? "no location");
+const resetToken = resetUrl ? new URL(resetUrl).searchParams.get("token") : null;
+check("reset link carries token", !!resetToken, resetUrl ?? "no url");
 if (resetToken) {
   const reset = await post("/auth/reset-password", { token: resetToken, password: NEW_PASS });
   check("reset-password accepts token", reset.status === 200, `got ${reset.status}`);

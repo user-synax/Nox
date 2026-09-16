@@ -144,23 +144,30 @@ export async function connectDB(uri) {
     .collection("workerHeartbeats")
     .createIndex({ lastBeat: -1 }, { name: "workerHeartbeats_beat" });
 
-  // Better Auth session + verification collections: TTL on expiry so
-  // stale rows disappear even if a worker never cleans them.
+  // Hand-rolled auth collections (src/lib/session.js + tokens.js + oauth.js).
+  // TTL indexes sweep dead rows even if no worker ever cleans them.
   // (Collections are created lazily — createIndex creates them.)
-  try {
-    await db
-      .collection("session")
-      .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: "session_expires_ttl" });
-  } catch {
-    /* index may already exist with different options — non-fatal */
-  }
-  try {
-    await db
-      .collection("verification")
-      .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: "verification_expires_ttl" });
-  } catch {
-    /* non-fatal */
-  }
+  await db
+    .collection("sessions")
+    .createIndex({ tokenHash: 1 }, { unique: true, name: "sessions_token_unique" });
+  await db
+    .collection("sessions")
+    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: "sessions_expires_ttl" });
+  await db
+    .collection("sessions")
+    .createIndex({ userId: 1 }, { name: "sessions_user" });
+  await db
+    .collection("emailTokens")
+    .createIndex({ tokenHash: 1 }, { unique: true, name: "emailTokens_token_unique" });
+  await db
+    .collection("emailTokens")
+    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: "emailTokens_expires_ttl" });
+  await db
+    .collection("oauthStates")
+    .createIndex({ state: 1 }, { unique: true, name: "oauthStates_state_unique" });
+  await db
+    .collection("oauthStates")
+    .createIndex({ createdAt: 1 }, { expireAfterSeconds: 600, name: "oauthStates_created_ttl" });
 
   return { client, db };
 }

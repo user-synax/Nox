@@ -2,7 +2,7 @@ import { Router } from "express";
 import { ObjectId } from "mongodb";
 import { validate } from "../middleware/validate.js";
 import { authRateLimit } from "../middleware/rateLimit.js";
-import { toWebHeaders } from "./auth.js";
+import { getSessionUser } from "../lib/session.js";
 import {
   solutionWriteSchema,
   solutionPatchSchema,
@@ -46,29 +46,20 @@ function isAdmin(roles) {
   return Array.isArray(roles) && roles.some((r) => r === "ADMIN" || r === "FOUNDER");
 }
 
-async function requireUser(auth, req, res) {
-  try {
-    const session = await auth.api.getSession({ headers: toWebHeaders(req) });
-    if (!session?.user?.id) {
-      res.status(401).json({ error: "Not signed in." });
-      return null;
-    }
-    return { id: new ObjectId(session.user.id), roles: session.user.roles ?? [] };
-  } catch {
+async function requireUser(db, req, res) {
+  const found = await getSessionUser(db, req, res);
+  if (!found) {
     res.status(401).json({ error: "Not signed in." });
     return null;
   }
+  return { id: found.user._id, roles: found.user.roles ?? [] };
 }
 
 /** Session when present, null when anonymous — never sends a status. */
-async function optionalUser(auth, req) {
-  try {
-    const session = await auth.api.getSession({ headers: toWebHeaders(req) });
-    if (!session?.user?.id) return null;
-    return { id: new ObjectId(session.user.id), roles: session.user.roles ?? [] };
-  } catch {
-    return null;
-  }
+async function optionalUser(db, req) {
+  const found = await getSessionUser(db, req);
+  if (!found) return null;
+  return { id: found.user._id, roles: found.user.roles ?? [] };
 }
 
 /** Solved ⇔ accepted submission exists. Authors/admins bypass. */
@@ -169,7 +160,7 @@ async function recount(db, targetType, targetId, col, field) {
   return likeCount;
 }
 
-export function createSolutionRoutes(auth, db) {
+export function createSolutionRoutes(db) {
   const router = Router();
   const solutions = () => db.collection("solutions");
   const comments = () => db.collection("comments");
@@ -184,7 +175,7 @@ export function createSolutionRoutes(auth, db) {
     solutionLimit(),
     validate(solutionWriteSchema),
     async (req, res) => {
-      const me = await requireUser(auth, req, res);
+      const me = await requireUser(db, req, res);
       if (!me) return;
       try {
         const challenge = await findPublishedChallenge(db, req.params.id);
@@ -230,7 +221,7 @@ export function createSolutionRoutes(auth, db) {
     "/challenges/:id/solutions",
     validate(solutionListQuerySchema, "query"),
     async (req, res) => {
-      const me = await optionalUser(auth, req);
+      const me = await optionalUser(db, req);
       try {
         const challenge = await findPublishedChallenge(db, req.params.id);
         if (!challenge) return res.status(404).json({ error: "Challenge not found." });
@@ -271,7 +262,7 @@ export function createSolutionRoutes(auth, db) {
   // ── Community feed: newest write-ups the viewer unlocked ────
   // Registered BEFORE /solutions/:id so “recent” never hits the param route.
   router.get("/solutions/recent", async (req, res) => {
-    const me = await requireUser(auth, req, res);
+    const me = await requireUser(db, req, res);
     if (!me) return;
     try {
       const page = Math.min(100, Math.max(1, Number(req.query.page) || 1));
@@ -323,7 +314,7 @@ export function createSolutionRoutes(auth, db) {
 
   // ── Full post ────────────────────────────────────────────────
   router.get("/solutions/:id", async (req, res) => {
-    const me = await optionalUser(auth, req);
+    const me = await optionalUser(db, req);
     try {
       const sid = toId(req.params.id);
       if (!sid) return res.status(404).json({ error: "Solution not found." });
@@ -350,7 +341,7 @@ export function createSolutionRoutes(auth, db) {
 
   // ── Edit own post ────────────────────────────────────────────
   router.patch("/solutions/:id", validate(solutionPatchSchema), async (req, res) => {
-    const me = await requireUser(auth, req, res);
+    const me = await requireUser(db, req, res);
     if (!me) return;
     try {
       const sid = toId(req.params.id);
@@ -387,7 +378,7 @@ export function createSolutionRoutes(auth, db) {
 
   // ── Delete own post (+ thread + likes) ───────────────────────
   router.delete("/solutions/:id", async (req, res) => {
-    const me = await requireUser(auth, req, res);
+    const me = await requireUser(db, req, res);
     if (!me) return;
     try {
       const sid = toId(req.params.id);
@@ -429,7 +420,7 @@ export function createSolutionRoutes(auth, db) {
 
   // ── Toggle solution like ─────────────────────────────────────
   router.post("/solutions/:id/like", likeLimit(), async (req, res) => {
-    const me = await requireUser(auth, req, res);
+    const me = await requireUser(db, req, res);
     if (!me) return;
     try {
       const sid = toId(req.params.id);
@@ -475,7 +466,7 @@ export function createSolutionRoutes(auth, db) {
     "/solutions/:id/comments",
     validate(commentListQuerySchema, "query"),
     async (req, res) => {
-      const me = await optionalUser(auth, req);
+      const me = await optionalUser(db, req);
       try {
         const sid = toId(req.params.id);
         if (!sid) return res.status(404).json({ error: "Solution not found." });
@@ -516,7 +507,7 @@ export function createSolutionRoutes(auth, db) {
     commentLimit(),
     validate(commentWriteSchema),
     async (req, res) => {
-      const me = await requireUser(auth, req, res);
+      const me = await requireUser(db, req, res);
       if (!me) return;
       try {
         const sid = toId(req.params.id);
@@ -555,7 +546,7 @@ export function createSolutionRoutes(auth, db) {
   );
 
   router.patch("/comments/:id", validate(commentWriteSchema), async (req, res) => {
-    const me = await requireUser(auth, req, res);
+    const me = await requireUser(db, req, res);
     if (!me) return;
     try {
       const cid = toId(req.params.id);
@@ -585,7 +576,7 @@ export function createSolutionRoutes(auth, db) {
   });
 
   router.delete("/comments/:id", async (req, res) => {
-    const me = await requireUser(auth, req, res);
+    const me = await requireUser(db, req, res);
     if (!me) return;
     try {
       const cid = toId(req.params.id);
@@ -619,7 +610,7 @@ export function createSolutionRoutes(auth, db) {
   });
 
   router.post("/comments/:id/like", likeLimit(), async (req, res) => {
-    const me = await requireUser(auth, req, res);
+    const me = await requireUser(db, req, res);
     if (!me) return;
     try {
       const cid = toId(req.params.id);
@@ -664,7 +655,7 @@ export function createSolutionRoutes(auth, db) {
 
   // ── Own posts ────────────────────────────────────────────────
   router.get("/users/me/solutions", async (req, res) => {
-    const me = await requireUser(auth, req, res);
+    const me = await requireUser(db, req, res);
     if (!me) return;
     try {
       const page = Math.min(100, Math.max(1, Number(req.query.page) || 1));
@@ -705,7 +696,7 @@ export function createSolutionRoutes(auth, db) {
       const username = String(req.params.username ?? "").toLowerCase();
       const author = await db.collection("user").findOne({ username });
       if (!author) return res.status(404).json({ error: "User not found." });
-      const me = await optionalUser(auth, req);
+      const me = await optionalUser(db, req);
       const page = Math.min(100, Math.max(1, Number(req.query.page) || 1));
       const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
       const rows = await solutions()
