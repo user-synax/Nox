@@ -3,8 +3,8 @@
 **Product:** Nox  
 **Domain:** `Nox.synax.me`  
 **Status:** MVP Planning  
-**Document Version:** 1.0  
-**Last Updated:** 2026-09-15  
+**Document Version:** 1.1  
+**Last Updated:** 2026-09-16  
 **Owner:** Ayush / Synax
 
 ---
@@ -184,12 +184,12 @@ After a successful submission, the user can:
 ### Required
 
 - Email/password authentication.
-- Google OAuth.
-- Email verification.
-- Session management.
+- Google OAuth (code-complete; enabled by setting `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, no code change needed).
+- Email verification (endpoints + `/verify-email` page exist; enforcement is currently OFF — signup signs straight in and verification/reset links are captured to a dev-only outbox until a real email provider is wired).
+- Session management (7-day DB sessions, daily refresh, 5-minute signed cookie cache).
 - Logout.
-- Password reset.
-- Basic account security controls.
+- Password reset (same dev-outbox note as verification).
+- Basic account security controls (domain allowlist, per-IP rate limits, RBAC).
 
 ### Future
 
@@ -335,8 +335,9 @@ Future versions can dynamically calibrate difficulty from user performance.
 
 ## 8.1 MVP
 
-- JavaScript.
-- Node JS
+- JavaScript (executable).
+- Python (executable).
+- TypeScript (present in language metadata, **not** executable yet — submissions return 422).
 
 ## 8.2 Language architecture requirement
 
@@ -422,33 +423,42 @@ This is the most security-sensitive part of Nox.
                                   │
                                HTTPS
                                   │
-                         ┌────────▼────────┐
-                         │      API        │
-                         └────────┬────────┘
+                          ┌────────▼────────┐
+                          │      API        │
+                          └────────┬────────┘
+                                   │
+                     MongoDB-backed queue (`runs`
+                     collection — no Redis/BullMQ;
+                     atomic claim, leases, sweep)
+                                   │
+                          ┌────────▼────────┐
+                          │ Worker pool     │
+                          │ (separate procs,│
+                          │ never the API)  │
+                          └────────┬────────┘
+                                   │
+                ┌──────────────────┼──────────────────┐
+                ▼                  ▼                  ▼
+         ┌────────────┐     ┌────────────┐     ┌────────────┐
+         │ JS runner  │     │ Py runner  │     │ (future)   │
+         │ temp dir   │     │ temp dir   │     │ containers │
+         └─────┬──────┘     └─────┬──────┘     └─────┬──────┘
+               └──────────────────┼──────────────────┘
+                                  ▼
+                          Test result / metrics
                                   │
-                               Queue
-                                  │
-                         ┌────────▼────────┐
-                         │ Execution Queue │
-                         └────────┬────────┘
-                                  │
-               ┌──────────────────┼──────────────────┐
-               ▼                  ▼                  ▼
-        ┌────────────┐     ┌────────────┐     ┌────────────┐
-        │ JS Worker  │     │ TS Worker  │     │ Py Worker  │
-        │ Sandbox    │     │ Sandbox    │     │ Sandbox    │
-        └─────┬──────┘     └─────┬──────┘     └─────┬──────┘
-              └──────────────────┼──────────────────┘
-                                 ▼
-                         Test result / metrics
-                                 │
-                                 ▼
-                              MongoDB
+                                  ▼
+                               MongoDB
 ```
 
 ## 10.3 MVP sandbox controls
 
-Execution environments must enforce, as applicable:
+Current state (2026-09-16): workers run in throwaway temp directories in a
+separate process with timeouts, output caps, stripped env, and no app
+secrets. Full container isolation below is the hardening milestone
+(Roadmap §11), not current behavior.
+
+Target execution environments must enforce, as applicable:
 
 - CPU limit.
 - Memory limit.
@@ -571,6 +581,10 @@ However, hidden tests are the source of truth for acceptance. A user should not 
 
 A submission that does not satisfy all required hidden tests is not an accepted solution.
 
+### Implemented values (`backend/workers/scoring.js`)
+
+First-accept XP: easy 50 / medium 100 / hard 200 / expert 350; repeat solves 10 XP. Elo `K = 32` against difficulty anchors (easy 800 / medium 1200 / hard 1600 / expert 2000); rejected submits cost 2 rating. Level = `1 + floor(xp / 250)`. Stored hidden-test results keep `{ name, passed, error? }` only, so reading your own submission cannot leak hidden data.
+
 ---
 
 # 14. Competitive Rating
@@ -626,7 +640,7 @@ Master
 Grandmaster
 ```
 
-Rank thresholds should be configurable from the backend rather than hardcoded into the frontend.
+Rank thresholds are defined in the backend (`workers/scoring.js`: Grandmaster 2200 / Master 2000 / Diamond 1800 / Platinum 1600 / Gold 1400 / Silver 1200 / Bronze below) and exposed via `GET /leaderboard/ranks`; the frontend mirrors them and must never be the source of truth.
 
 ---
 
@@ -636,18 +650,21 @@ Rank thresholds should be configurable from the backend rather than hardcoded in
 
 ### Global leaderboard
 
-Rank users by competitive rating.
+Rank users by competitive rating. Implemented (`GET /leaderboard/global` + frontend page).
 
 ### Weekly leaderboard
 
-Rank by rating progression or challenge score during the current weekly period.
+Rank by rating progression over the last 7 days (sourced from `ratingEvents`). Implemented (`GET /leaderboard/weekly`, optional `?language=` / `?category=` filters).
 
-### Optional filtered leaderboards
+### Additional implemented boards
 
-- Language.
-- Category.
+- Level board (total XP): `GET /leaderboard/level`.
+- Per-language XP race: `GET /leaderboard/language?language=`.
+- Per-category XP race: `GET /leaderboard/category?category=`.
+- Own position on any board: `GET /leaderboard/me?type=&language=&category=`.
+- Rank/XP tuning for clients: `GET /leaderboard/ranks`.
 
-The backend should support filters even if only global and weekly views are exposed initially.
+Per-track XP is credited by the judge on each accepted solve (`xpByLanguage` / `xpByCategory` on `profileStats`), so no extra collections are needed.
 
 ---
 
@@ -661,24 +678,27 @@ Track:
 
 - Current streak.
 - Longest streak.
-- Last active date.
+- Last active date (stored as UTC `YYYY-MM-DD` string).
 
-Do not make streaks the primary product value.
+Implemented in the submit judge: an accepted solve on a new UTC day extends the streak (same-day solves leave it untouched). Do not make streaks the primary product value.
 
 ---
 
 # 18. Daily Challenge
 
-A single highlighted challenge is presented each day.
+A single highlighted challenge is presented each day. Implemented (2026-09-16).
 
 ### Requirements
 
 - One canonical challenge per day.
 - Globally consistent challenge for all users.
-- Challenge can be configured by admins.
-- Daily challenge results contribute to normal progression.
+- Day boundary is UTC (`YYYY-MM-DD`), matching streak accounting.
+- Selection is deterministic auto-rotation over published challenges ordered by slug (`day-index mod count`) — no admin step, no new collection. Served by `GET /daily-challenge[?date=]`, mounted at both `/` and `/api`.
+- Past days resolve with the same function and link to normal challenge pages, so they stay solvable.
+- Daily challenge results contribute to normal progression (no bonus XP/rating; solves go through the standard submit flow).
+- Surfaced on the dashboard widget; hidden tests are stripped exactly like the challenge detail route.
 
-Future versions may add separate daily challenge variants by language or skill level.
+Future versions may add admin overrides, archives, or separate daily challenge variants by language or skill level.
 
 ---
 
@@ -710,10 +730,12 @@ This protects challenge integrity.
 
 ## MVP community interactions
 
-- Like.
-- Comment.
-- Bookmark.
-- Report.
+- Like (solutions and comments). Implemented.
+- Comment (single thread per solution). Implemented.
+- Bookmark. Not built.
+- Report. Not built.
+
+Solution visibility rule is enforced server-side (403 until the viewer has an accepted submission). Realtime fan-out covers solution/comment create/update/delete/like events.
 
 Not included in MVP:
 
@@ -742,10 +764,11 @@ Users should be able to find challenges by:
 ```text
 Recommended
 All
-Daily
+Newest
 Trending
-New
 ```
+
+(Implemented tabs on `/challenges`. There is no separate Daily tab — the daily challenge lives on the dashboard widget.)
 
 Recommendation logic may start simple:
 
@@ -774,9 +797,9 @@ Notifications should have read/unread state.
 
 ### Realtime requirement
 
-Socket.IO should be used for live notification delivery when the user is connected.
+Socket.IO is live and used for community fan-out (solution/comment events on `challenge:<id>` and `solution:<id>` rooms) with best-effort session attach; sockets only ever receive, all writes go through REST.
 
-Persist notifications in MongoDB so they remain available after reconnect.
+There is no notification center yet, so there is nothing to persist or deliver. Submission/run progress is REST polling (`GET /runs/:id`, `GET /submissions/:id`), not sockets.
 
 ---
 
@@ -786,18 +809,20 @@ Nox requires an admin surface from the beginning because challenge quality and e
 
 ## MVP admin features
 
-- User search.
-- User details.
-- Suspend/ban user.
+Implemented today (API only, ADMIN+; there is no admin UI — admins work via API/scripts, plus a `make-admin.js` script for role grants):
+
 - Challenge CRUD.
 - Publish/unpublish challenge.
-- Challenge preview.
-- Hidden test management.
+- Challenge preview (full docs including hidden tests, admin routes only).
+- Hidden test management (via the challenge write endpoints; content edits auto-bump `version`).
+
+Not built yet:
+
+- User search / details / suspend / ban.
 - Submission inspection.
-- Solution moderation.
-- Comment moderation.
-- Report management.
-- Basic execution queue visibility.
+- Solution / comment moderation.
+- Report management (no report endpoints exist).
+- Execution queue visibility beyond `GET /api/health` counters (queued/running + workers online).
 - Audit log.
 
 ## Roles
@@ -816,6 +841,8 @@ RBAC must be enforced on the API, not only in the frontend.
 ---
 
 # 23. Moderation
+
+> Status (2026-09-16): not implemented. No report, hide, remove, warn, suspend, or ban endpoints exist, and no audit log is written. The only integrity gates in place are solved-only solution visibility and author/admin ownership checks on edit/delete.
 
 ## User-generated content requiring moderation
 
@@ -867,10 +894,11 @@ Solo solving does not eliminate realtime requirements.
 
 ## MVP realtime use cases
 
-- Submission state.
-- Test execution state.
-- Notification delivery.
-- Leaderboard updates where useful.
+- Submission state. (Current: REST polling.)
+- Test execution state. (Current: REST polling.)
+- Solution/comment create, update, delete, and like events. (Live via Socket.IO rooms.)
+- Notification delivery. (Deferred — no notification center.)
+- Leaderboard updates where useful. (Deferred — boards are fetched via REST.)
 - Challenge counters / aggregate activity if later enabled.
 
 ## Proposed stack
@@ -899,13 +927,13 @@ client → POST /submissions
 
 ## Frontend
 
-- Next.js.
+- Next.js 16 (App Router).
 - JavaScript.
-- App Router.
-- Tailwind CSS.
-- shadcn/ui.
-- Framer Motion.
-- Monaco Editor.
+- Tailwind CSS v4.
+- shadcn/ui (one Button component vendored; the UI is otherwise bespoke).
+- Monaco Editor (`@monaco-editor/react`, `Nox-dark` theme).
+- socket.io-client (community fan-out).
+- Framer Motion: not used — motion is hand-rolled CSS transitions.
 
 ## Backend
 
@@ -921,10 +949,9 @@ client → POST /submissions
 
 ## Queue / execution infrastructure
 
-- Redis.
-- BullMQ or equivalent queue system.
-- Isolated execution workers.
-- Container-based sandboxing.
+- MongoDB-backed queue (`runs` collection: atomic claim, leases, startup sweep) — replaces Redis/BullMQ; no extra infrastructure to install.
+- Separate worker processes (`bun workers/runner.js`, configurable concurrency/poll interval, heartbeats).
+- Throwaway temp-dir execution for JavaScript (`node`) and Python runners. Container-based sandboxing is deferred to hardening (Roadmap §11).
 
 ## Authentication
 
@@ -1003,18 +1030,25 @@ updatedAt
 
 ```text
 userId
-rating
+rating                 # starts at 1000
 xp
-level
+level                  # 1 + floor(xp / 250)
+xpByLanguage{}         # per-track XP powering language leaderboards
+xpByCategory{}         # per-track XP powering category leaderboards
+solvesByLanguage{}
+solvesByCategory{}
 currentStreak
 longestStreak
-solvedCount
+lastActiveDate         # UTC YYYY-MM-DD string
+solvedCount            # distinct challenges accepted
 acceptedCount
 attemptCount
+submissionCount
 successRate
 hardestSolvedChallengeId
 preferredLanguages[]
 skills{}
+createdAt
 updatedAt
 ```
 
@@ -1025,19 +1059,25 @@ _id
 slug
 title
 description
-language
+kind                   # bug-fix | logic-error | runtime-error | api-bug
+language               # javascript | typescript | Python
 category
 tags[]
 difficulty
-starterFiles[]
-visibleTests[]
-hiddenTestConfig
+starterFiles[]         # [{ path, content }]
+visibleTests[]         # [{ name, description?, input, expected }]
+hiddenTests[]          # same shape; never leaves the server except admin routes
+entryFile
+entryFunction
+testContext{}          # judge-injected trailing args, admin-authored
 constraints
+hints[]
 timeLimitMs
 memoryLimitMb
+estimatedSolveMinutes
 authorId
-status
-version
+status                 # draft | published
+version                # auto-bumps on content edits
 solveCount
 attemptCount
 createdAt
@@ -1050,19 +1090,65 @@ updatedAt
 _id
 userId
 challengeId
-challengeVersion
+challengeSlug
+challengeTitle
+challengeVersion       # locks the judged version
+difficulty
 language
-sourceSnapshot
-status
-score
+category
+files[]                # immutable source snapshot [{ path, content }]
+status                 # pending → accepted | rejected | timeout | runtime-error | system-error
 testsPassed
-testsTotal
+testsTotal             # hidden suite size
+results[]              # [{ name, passed, error? }] — no hidden input/expected/actual
+score
+scoreBreakdown{}       # { correctness, efficiency, speed, quality }
+xpAwarded
+ratingDelta
 executionTimeMs
-memoryUsedMb
+error
+createdAt
+completedAt
+```
+
+## Run (visible-test execution)
+
+```text
+_id
+kind                   # run | submit
+userId
+challengeId (+ slug/title/version/difficulty/language/category snapshot)
+entryFile / entryFunction / testContext / tests (visible suite for runs)
+files[]                # merged user code over starters
+status                 # queued → running → passed | failed | timeout | runtime-error | system-error
+testsPassed / testsTotal / results[] (full input/expected/actual — visible tests only)
+executionTimeMs / error / output
+attempts (retry budget for system-error)
+workerId / leaseUntil / startedAt / completedAt
+createdAt
+```
+
+## RatingEvent (leaderboard + activity feed source)
+
+```text
+_id
+userId
+challengeId / challengeSlug / challengeTitle / difficulty
+language / category
+accepted
+score
 ratingDelta
 xpAwarded
 createdAt
-completedAt
+```
+
+## SolutionPost / Comment / Like (no bookmarks, reports, or notifications yet)
+
+```text
+Solution: _id, authorId, challengeId, title, body, code, language,
+          tags[], likeCount, commentCount, status, createdAt, updatedAt
+Comment:  _id, solutionId, authorId, body, likeCount, createdAt, updatedAt
+Like:     { targetType, targetId, userId } (unique) — solutions + comments share it
 ```
 
 ## SolutionPost
@@ -1182,68 +1268,106 @@ Nox  /users/me
 GET    /users/me/stats
 ```
 
+All routes below are mounted at both `/` and `/api`. Run/submit return `202` with an id; clients poll for the verdict.
+
 ## Challenges
 
 ```text
-GET    /challenges
-GET    /challenges/:slug
-GET    /challenges/:slug/tests/visible
+GET    /challenges                 # published only, filterable + paginated
+GET    /challenges/:slug           # detail; solved users also get their accepted snapshot
 ```
 
-## Submissions
+## Daily challenge
 
 ```text
-POST   /challenges/:id/run
-POST   /challenges/:id/submit
-GET    /submissions/:id
-GET    /users/me/submissions
+GET    /daily-challenge[?date=YYYY-MM-DD]   # UTC auto-rotation (PRD §18)
+```
+
+## Runs (visible tests)
+
+```text
+POST   /challenges/:id/run        # 202 { runId }
+GET    /runs/:id                   # owner/admin only
+```
+
+## Submissions (hidden judging)
+
+```text
+POST   /challenges/:id/submit     # 202 { submissionId }; locked once solved
+GET    /submissions/:id            # owner/admin only
+GET    /users/me/submissions       # own history, newest first
+```
+
+## Users
+
+```text
+GET    /users/:username            # public profile
+GET    /users/me                   # session user + stats + onboarding flag
+Nox  /users/me                   # profile fields, languages, interests
+POST   /users/me/avatar            # JPEG/PNG/WebP ≤ 2MB (needs full Appwrite config)
+POST   /users/me/onboarding        # final onboarding save
+GET    /users/me/solutions         # own write-ups
+GET    /users/:username/solutions  # author write-ups (solved-only filtered)
 ```
 
 ## Solutions
 
 ```text
-POST   /challenges/:id/solutions
-GET    /challenges/:id/solutions
+POST   /challenges/:id/solutions  # gated on accepted submission
+GET    /challenges/:id/solutions  # 403 until viewer has solved (sort newest|top)
+GET    /solutions/recent           # community feed (challenges you solved)
 GET    /solutions/:id
-POST   /solutions/:id/like
-POST   /solutions/:id/bookmark
-POST   /solutions/:id/report
+Nox  /solutions/:id
+DELETE /solutions/:id
+POST   /solutions/:id/like        # toggle → { liked, likeCount }
 ```
+
+(Bookmarks and reports are not built.)
 
 ## Comments
 
 ```text
-GET    /solutions/:id/comments
+GET    /solutions/:id/comments    # oldest first
 POST   /solutions/:id/comments
+Nox  /comments/:id
 DELETE /comments/:id
+POST   /comments/:id/like         # toggle
 ```
 
 ## Leaderboards
 
 ```text
-GET /leaderboard/global
-GET /leaderboard/weekly
+GET /leaderboard/global            # rating ladder
+GET /leaderboard/level             # XP race
+GET /leaderboard/weekly[?language=][?category=]   # 7-day rating progression
+GET /leaderboard/language?language=               # per-language XP race
+GET /leaderboard/category?category=               # per-category XP race
+GET /leaderboard/me?type=[global|level|weekly|language|category]
+GET /leaderboard/ranks             # rank ladder + XP tuning (client mirror source)
 ```
 
 ## Notifications
 
-```text
-GET    /notifications
-POST   /notifications/:id/read
-POST   /notifications/read-all
-```
+Not built — no endpoints, no notification center.
 
-## Admin
+## Admin (ADMIN+, API only — no admin UI)
 
 ```text
-GET    /admin/users
 GET    /admin/challenges
 POST   /admin/challenges
-Nox  /admin/challenges/:id
+Nox  /admin/challenges/:id       # partial update; content edits bump version
 POST   /admin/challenges/:id/publish
-GET    /admin/submissions
-GET    /admin/reports
-Nox  /admin/reports/:id
+POST   /admin/challenges/:id/unpublish
+DELETE /admin/challenges/:id
+```
+
+(No user, submission, or report admin endpoints yet.)
+
+## Ops
+
+```text
+GET    /api/health                 # { ok, time, queue: { queued, running }, workersOnline }
+GET    /auth/dev/outbox?email=     # dev-only: last verification/reset links (never in prod)
 ```
 
 ---
@@ -1253,13 +1377,17 @@ Nox  /admin/reports/:id
 Suggested event namespace:
 
 ```text
-submission:queued
-submission:running
-submission:completed
-submission:failed
-notification:new
-leaderboard:updated
+solution:new
+solution:updated
+solution:deleted
+solution:like
+comment:new
+comment:updated
+comment:deleted
+comment:like
 ```
+
+(Planned but not emitted: `submission:queued/running/completed/failed`, `notification:new`, `leaderboard:updated` — clients poll the corresponding REST endpoints instead.)
 
 The client must not treat realtime messages as the source of truth for durable state. On reconnect, the client should fetch authoritative state from the API.
 
@@ -1271,41 +1399,40 @@ The client must not treat realtime messages as the source of truth for durable s
 
 ```text
 /
-/challenges
-/challenges/[slug]
-/leaderboard
-/solutions/[id]
-/u/[username]
+/challenges                        # catalog (also the authed shell)
+/challenges/[slug]                 # overview + solutions tab
+/challenges/[slug]/solve           # Monaco workspace (signed in to run/submit)
+/leaderboard                       # global / level / weekly / language / category
+/community                         # solution feed (signed in)
+/solutions/[id]                    # solution thread + comments
+/u/[username]                      # public profile
 /login
 /signup
+/forgot-password
+/reset-password
+/verify-email
+/privacy, /terms, /cookies
 ```
 
 ## Authenticated
 
 ```text
-/dashboard
-/challenges
-/challenges/[slug]
-/submissions
-/profile
-/settings
-/notifications
+/dashboard                         # stats, checklist, daily widget, activity, rank rail
+/onboarding                        # 3-step wizard
+/settings                          # profile editor
 ```
+
+There are no `/submissions`, `/notifications`, `/profile`, or `/admin` pages. Auth is enforced by middleware plus an authed app-shell gate.
 
 ## Admin
 
-```text
-/admin
-/admin/users
-/admin/challenges
-/admin/submissions
-/admin/reports
-/admin/audit-logs
-```
+API only (see §29). No admin pages exist.
 
 ---
 
 # 32. Landing Page
+
+Built: hero ("Debug code. Build skill. Prove it."), interactive broken/fixed demo, how-it-works steps, example challenge, scoring breakdown, progression, profiles, community, FAQ — in the dark-canvas system.
 
 The landing page should immediately explain the difference from traditional coding platforms.
 
@@ -1578,28 +1705,28 @@ Infrastructure failures must never unfairly punish users.
 
 # 41. MVP Acceptance Criteria
 
-Nox MVP is considered complete when a new user can:
+Status as of 2026-09-16 (`[x]` done, `[~]` partial, `[ ]` open). Nox MVP is considered complete when a new user can:
 
-1. Create an account.
-2. Verify the account.
-3. Create a public profile.
-4. Browse and filter challenges.
-5. Open a challenge.
-6. Read the problem and expected behavior.
-7. Edit code in the browser.
-8. Run visible tests.
-9. Receive execution output.
-10. Submit code.
-11. Have the submission evaluated against hidden tests.
-12. Receive a final result and score.
-13. Gain XP and rating on success.
-14. See challenge history.
-15. See progress on the public profile.
-16. Appear on a leaderboard.
-17. Publish a solution after successful completion.
-18. Comment on another solution.
-19. Receive an in-app notification.
-20. Have admins manage challenges and moderate content.
+1. [x] Create an account.
+2. [~] Verify the account. (Endpoints + page exist; enforcement OFF until a real email provider is wired.)
+3. [x] Create a public profile.
+4. [x] Browse and filter challenges.
+5. [x] Open a challenge.
+6. [x] Read the problem and expected behavior.
+7. [x] Edit code in the browser (Monaco, multi-file tabs, drafts, reset).
+8. [x] Run visible tests.
+9. [x] Receive execution output.
+10. [x] Submit code.
+11. [x] Have the submission evaluated against hidden tests.
+12. [x] Receive a final result and score.
+13. [x] Gain XP and rating on success.
+14. [~] See challenge history. (API + dashboard activity; no dedicated `/submissions` page.)
+15. [x] See progress on the public profile.
+16. [x] Appear on a leaderboard.
+17. [x] Publish a solution after successful completion.
+18. [x] Comment on another solution.
+19. [ ] Receive an in-app notification.
+20. [~] Have admins manage challenges and moderate content. (Challenge admin via API only; no moderation endpoints or admin UI.)
 
 ---
 
@@ -1607,36 +1734,41 @@ Nox MVP is considered complete when a new user can:
 
 ## Build for V1
 
-- Authentication.
+Built (2026-09-16):
+
+- Authentication (verification enforcement deferred to email delivery).
 - Public profiles.
 - Challenge catalog.
 - JavaScript support.
-- JavaScript support.
-- Python support.
+- Python support (the duplicated "JavaScript support" line above meant TypeScript — still pending).
 - Monaco editor.
 - Visible tests.
 - Hidden tests.
-- Isolated execution.
-- Submission queue.
+- Isolated execution (separate worker processes + temp dirs; containers deferred).
+- Submission queue (MongoDB-backed; Redis/BullMQ dropped).
 - Automatic judging.
 - XP.
 - Rating.
 - Ranks.
 - Global leaderboard.
-- Weekly leaderboard.
+- Weekly leaderboard (plus level / language / category boards).
 - Streaks.
-- Daily challenge.
+- Daily challenge (UTC auto-rotation, dashboard widget).
 - Solution sharing.
 - Likes.
 - Comments.
+- Rate limits.
+- Security/observability baseline (`/api/health`, worker heartbeats).
+
+Explicitly still deferred:
+
+- TypeScript execution.
 - Bookmarks.
 - Reports.
 - In-app notifications.
 - Admin dashboard.
 - Basic moderation.
-- Rate limits.
 - Audit logs.
-- Security/observability baseline.
 
 ## Explicitly defer
 
@@ -1905,15 +2037,15 @@ These items can be changed without rewriting the overall PRD.
 | Domain | Nox.synax.me |
 | Product model | Developer practice + competition |
 | Primary interaction | Solo debugging |
-| MVP languages | JS / TS / Python |
-| Frontend | Next.js + JavaScript |
-| UI | Tailwind + shadcn/ui |
-| Editor | Monaco |
-| Backend | Node.js + Express |
-| Database | MongoDB |
-| Realtime | Socket.IO |
-| Queue | Redis + BullMQ or equivalent |
-| Execution | Isolated workers/containers |
+| MVP languages | JS + Python executable; TS metadata-only (422) |
+| Frontend | Next.js 16 + JavaScript |
+| UI | Tailwind v4 + bespoke components (one shadcn Button vendored) |
+| Editor | Monaco (`@monaco-editor/react`) |
+| Backend | Node.js + Express (Bun runtime) |
+| Database | MongoDB (native driver) |
+| Realtime | Socket.IO (community events; submissions poll REST) |
+| Queue | MongoDB-backed `runs` queue (Redis/BullMQ dropped) |
+| Execution | Separate worker processes + temp dirs (containers deferred) |
 | Authentication | Mature session/auth library |
 | Design | Dark-first, minimal developer tool |
 | Primary color | #4BA9E1 |
@@ -1984,28 +2116,28 @@ These items can be changed without rewriting the overall PRD.
 # 48. Recommended Initial Build Order
 
 ```text
-1. Monorepo + project foundations
-2. Authentication + user model
-3. Challenge schema + admin CRUD
-4. Challenge catalog + challenge page
-5. Monaco editor
-6. Execution queue
-7. Sandbox worker for JavaScript
-8. Visible tests
-9. Hidden tests + judging
-10. Submission history
-11. XP + rating + ranks
-12. Public profile
-13. Leaderboards
-14. Daily challenge + streaks
-15. Solution posts
-16. Comments/likes/bookmarks
-17. Notifications + Socket.IO
-18. Moderation + reports
-19. Security hardening
-20. Observability + production testing
-21. Add JavaScript and Python workers
-22. MVP launch
+1.  Monorepo + project foundations                        [x]
+2.  Authentication + user model                           [x] (verification enforcement deferred)
+3.  Challenge schema + admin CRUD                         [x]
+4.  Challenge catalog + challenge page                    [x]
+5.  Monaco editor                                         [x]
+6.  Execution queue (MongoDB-backed, not Redis)           [x]
+7.  Sandbox worker for JavaScript                         [x]
+8.  Visible tests                                         [x]
+9.  Hidden tests + judging                                [x]
+10. Submission history (API + dashboard; no /submissions) [~]
+11. XP + rating + ranks                                   [x]
+12. Public profile                                        [x]
+13. Leaderboards (+ level / language / category)          [x]
+14. Daily challenge + streaks                             [x]
+15. Solution posts                                        [x]
+16. Comments/likes (bookmarks deferred)                   [~]
+17. Notifications + Socket.IO (community events only)     [~]
+18. Moderation + reports                                  [ ]
+19. Security hardening (containers)                       [ ]
+20. Observability + production testing                    [~] (health + heartbeats live)
+21. Add JavaScript and Python workers                     [x]
+22. MVP launch                                            [ ]
 ```
 
 ---
@@ -2061,6 +2193,16 @@ The long-term vision is broader:
 ---
 
 # Changelog
+
+## v1.1 — 2026-09-16
+
+- Reconciled the PRD with the codebase (was written pre-implementation).
+- Daily challenge specified as built: UTC auto-rotation + dashboard widget, no admin step, normal progression.
+- Queue specified as MongoDB-backed; Redis/BullMQ dropped. Sandbox specified as worker temp dirs; containers deferred.
+- TypeScript marked metadata-only (422 on execution). JS + Python executable.
+- Leaderboards expanded to the five implemented boards + `/me` + `/ranks`.
+- Realtime scoped to community events; submissions poll REST. Notifications/moderation/bookmarks/reports/admin-UI marked not built.
+- Data model and §29 API surface rewritten to match the implementation. Acceptance criteria and build order annotated with status.
 
 ## v1.0 — 2026-09-15
 

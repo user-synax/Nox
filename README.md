@@ -28,7 +28,7 @@ Nox is a developer practice and competitive platform focused on real-world debug
 
 - **Debugging Challenges** — Find and fix bugs in intentionally broken code across multiple categories
 - **Hidden Tests** — Prove your fix with automated test validation, not just visible examples
-- **Isolated Execution** — Code runs in sandboxed containers for security
+- **Isolated Execution** — Code runs in separate worker processes with temp-dir isolation (container sandboxing planned)
 - **Monaco Editor** — Full-featured code editor in the browser
 - **Developer Profiles** — Public profiles with XP, ratings, ranks, streaks, and stats
 - **Leaderboards** — Global and weekly competitive rankings
@@ -44,9 +44,9 @@ Nox is a developer practice and competitive platform focused on real-world debug
 | Frontend | Next.js, React, Tailwind CSS, shadcn/ui, Monaco Editor |
 | Backend | Node.js, Express.js, Socket.IO |
 | Database | MongoDB |
-| Queue | Redis, BullMQ |
+| Queue | MongoDB-backed job queue (no extra infra) |
 | Auth | Better Auth (email/password + Google OAuth) |
-| Execution | Container-based sandboxed workers |
+| Execution | Isolated worker processes (JS + Python; containers planned) |
 
 ## Getting Started
 
@@ -84,9 +84,14 @@ cp backend/.env.example backend/.env
 ### Running Locally
 
 ```bash
-# Start backend
+# Start backend + execution worker together
 cd backend
-bun run dev
+bun run dev:all
+
+# Or start each process separately (worker executes user code)
+cd backend
+bun run dev      # API on :4000
+bun run worker   # execution worker (separate terminal)
 
 # Start frontend (in a separate terminal)
 cd frontend

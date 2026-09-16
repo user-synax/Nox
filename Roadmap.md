@@ -2,25 +2,30 @@
 
 **Product:** Nox (Nox.synax.me)  
 **Niche:** Real-world debugging practice platform — developers fix intentionally broken code, pass hidden tests, earn XP/rating, and build a public debugging profile.  
-**Current Status:** Alpha / MVP-ish (auth, challenge catalog, visible-test runs, JS + Python execution, drafts, onboarding, public profiles).  
-**Last Updated:** 2026-09-15
+**Current Status:** Late alpha — core loop complete (auth, catalog, Monaco workspace, visible runs, hidden-submit judging, XP/rating/ranks, leaderboards, streaks, daily challenge, solutions + realtime, landing, discovery, settings). Open: TS execution, notifications, moderation/reports/bookmarks, admin UI, achievements, email delivery, sandbox hardening.  
+**Last Updated:** 2026-09-16
 
 ---
 
 ## What's already on the app
 
-### Core loop (mostly working)
-- **Auth:** email/password (Better Auth), Google OAuth wired but dormant until credentials set, sessions (7-day DB), logout, password reset (dev-stubbed), rate-limited auth attempts.
-- **User profiles:** public `/u/[username]` pages with rating, XP, solved count, streak, level, languages, interests, bio, links; own-profile edit, avatar upload (JPEG/PNG/WebP ≤ 2MB), onboarding wizard (3 steps: profile → languages/interests → links).
-- **Challenge catalog:** admin CRUD (ADMIN+), publish/unpublish, hidden-test management, slugs, tags, difficulty, category, kind (`bug-fix`, `logic-error`, `runtime-error`, `api-bug`), time/memory limits, starter files, visible + hidden tests, testContext injection, entry file + entry function.
-- **Solving flow:** `/challenges/[slug]/solve` — Monaco editor (Nox-dark theme), multi-file tab switching, autosave drafts to IndexedDB, reset-to-starter, run visible tests (POST `/challenges/:id/run` → 202 `{runId}`), poll for result, test verdict UI with expected/actual diff.
-- **Execution:** separate worker process (`bun workers/runner.js`), MongoDB-backed queue (claim/lease/sweep), per-language runners — JavaScript (`node --max-old-space-size=256` + harness) and Python (import harness), sandbox env, temp dirs, cleanup, protocol parsing (`NOX_RESULT:` line + `_result.json`), timeouts, runtime errors, system errors, deep-equal results.
-- **Seed data:** 10 curated JS + Python debugging challenges (off-by-one, falsy trap, floating promises, reference trap, binary search bounds, stringly typed, indentation, floor division, etc.).
+### Core loop (working)
+- **Auth:** email/password (Better Auth), Google OAuth code-complete (enabled by env, credentials being configured), sessions (7-day DB, daily refresh, 5-min cookie cache), logout, verify-email + password-reset endpoints and pages (enforcement OFF — signup signs straight in, links go to a dev-only outbox until a real provider is wired), domain allow-list, rate-limited auth attempts, `make-admin.js` role script.
+- **User profiles:** public `/u/[username]` pages (stats, languages/interests, solutions, activity tabs); own-profile edit + `/settings` page, avatar upload (JPEG/PNG/WebP ≤ 2MB via Appwrite), onboarding wizard (3 steps: profile → languages/interests → links).
+- **Challenge catalog:** admin CRUD (ADMIN+, API only — no admin UI), publish/unpublish, hidden-test management, version auto-bump, slugs, tags, difficulty, category (all 8 incl. `newbies`), kind (`bug-fix`, `logic-error`, `runtime-error`, `api-bug`), time/memory limits, starter files, visible + hidden tests, testContext injection, entry file + entry function.
+- **Solving flow:** `/challenges/[slug]/solve` — Monaco editor (Nox-dark theme), multi-file tab switching, autosave drafts to IndexedDB, reset-to-starter, run visible tests (POST `/challenges/:id/run` → 202 `{runId}`), submit for hidden judging (POST `/challenges/:id/submit` → 202 `{submissionId}`), poll for verdict, score/XP/rating breakdown UI, solved-state read-only lock, share-solution deep link.
+- **Judging + progression:** hidden tests are the acceptance gate; stored results keep `{name, passed, error?}` only. Scoring 70/15/10/5, first-accept XP 50/100/200/350 (repeats 10), Elo K=32 vs difficulty anchors, rejected −2 rating, level = 1 + floor(xp/250), backend-owned rank ladder (Bronze → Grandmaster) exposed at `GET /leaderboard/ranks`. Streaks keyed on UTC day.
+- **Leaderboards:** global, level, weekly (+ language/category filters), per-language and per-category XP races, own-position endpoint — plus a full frontend page, dashboard mini widget, and rank badges.
+- **Daily challenge:** `GET /daily-challenge[?date=]` — deterministic UTC auto-rotation over published challenges (no admin step), hidden tests stripped, dashboard widget with solved state. Normal progression, no bonus.
+- **Community:** solved-gated solution posts, likes (solutions + comments), single-thread comments, recent feed (`/community`), solution detail (`/solutions/[id]`), author/own lists. Socket.IO rooms (`challenge:<id>`, `solution:<id>`) fan out solution/comment events. No bookmarks, reports, or notifications.
+- **Execution:** separate worker process (`bun workers/runner.js`, concurrency/poll/heartbeat env), MongoDB-backed queue (claim/lease/sweep — Redis/BullMQ deliberately dropped), per-language runners — JavaScript (`node --max-old-space-size=256` + harness) and Python (import harness), temp dirs, cleanup, protocol parsing (`NOX_RESULT:` line + `_result.json`), timeouts, runtime errors, system errors, deep-equal results. TypeScript is metadata-only (422).
+- **Seed data:** 59 published challenges (37 JS + 22 Python; 30 easy / 16 medium / 10 hard / 3 expert) across all 8 categories.
 
 ### UX / presentational
 - Dark-canvas design system, Geist + Inter fonts, transitions-dev-style panel reveals, tab pills, sidebar (lg) + mobile top bar + bottom tab bar.
-- Landing page skeleton (wordmark, nav, session-aware cluster, mobile hamburger) — landing hero content still TODO.
-- Auth pages (login/signup) with field-level shake errors, domain allow-list, Google button stub.
+- Landing page built: hero, interactive broken/fixed demo, how-it-works, example challenge, scoring, progression, profiles, community, FAQ.
+- Challenge discovery: `/challenges` catalog (Recommended/All/Newest/Trending, search + filters + pagination) and `/challenges/[slug]` overview (description, starter code, visible tests, solved-gated solutions tab).
+- Auth pages (login/signup) with field-level shake errors, domain allow-list, Google button stub (disabled until OAuth live).
 
 ---
 
@@ -28,8 +33,8 @@
 
 These are ordered roughly by dependency and upside. Each has a short "why" and a concrete starting shape.
 
-### 1. Hidden-test submission + scoring (the "Submit" milestone)
-**Why:** The solve page has a disabled "Submit" button and the PRD describes hidden tests as the source of truth for acceptance. Right now only visible tests run; a user can't actually complete a challenge.
+### 1. Hidden-test submission + scoring (the "Submit" milestone) — DONE (2026-09-16)
+**Was:** The solve page had a disabled "Submit" button and only visible tests ran.
 
 **Shape:**
 - New endpoint `POST /challenges/:id/submit` (owner-only, rate-limited) that snapshots files, locks the challenge version, enqueues a job that runs **hiddenTests** (not just visibleTests), writes an immutable submission record, and returns a runId/status.
@@ -40,8 +45,8 @@ These are ordered roughly by dependency and upside. Each has a short "why" and a
 
 **MVP rule:** hidden tests are the acceptance gate; a high score without passing all hidden tests is not accepted.
 
-### 2. Rating, ranks, XP, and leaderboards (competitive layer)
-**Why:** The PRD defines rating (Elo-like, start 1000), XP, ranks (Bronze → Grandmaster), weekly + global leaderboards, and streak tracking. The profile already shows rating/XP/level/streak stubs, but nothing computes them yet.
+### 2. Rating, ranks, XP, and leaderboards (competitive layer) — DONE (2026-09-16)
+**Was:** The profile showed rating/XP/level/streak stubs, but nothing computed them.
 
 **Shape:**
 - `profileStats` collection already exists (seeded at signup with `defaultProfileStats`). Add fields: `rating`, `xp`, `level`, `currentStreak`, `longestStreak`, `lastActiveAt`, `successRate`, `solvedCount`, `attemptCount`, `preferredLanguages`, `categoryBreakdown`.
@@ -50,17 +55,16 @@ These are ordered roughly by dependency and upside. Each has a short "why" and a
 - Leaderboard endpoints: `/leaderboard/global?period=weekly|alltime`, `/leaderboard/language?lang=javascript`, `/leaderboard/category?category=security` — paginated, cached briefly.
 - Frontend: leaderboard page (disabled in sidebar today with a "Soon" badge — wire it up).
 
-### 3. Daily challenge
-**Why:** PRD §18 — one canonical challenge per day, globally consistent, admin-configurable, contributes to normal progression. Good engagement hook and onboarding destination.
+### 3. Daily challenge — DONE (2026-09-16, as UTC auto-rotation)
+**Decision:** pure auto-rotation, no admin step, normal progression only, backend + dashboard widget scope.
 
-**Shape:**
-- Collection `dailyChallenges`: `{ date: "YYYY-MM-DD", challengeId, challengeSlug }`. One per day, admin-settable (admin UI or script).
-- Public endpoint `GET /daily-challenge` returns today's challenge (or 404 if none configured). Cache briefly.
-- Frontend: landing hero + dashboard widget linking to today's challenge; "yesterday/future" niceties optional for MVP.
-- Treat solves identically to normal challenges (XP, rating, streak) — don't double-count.
+- No `dailyChallenges` collection. `GET /daily-challenge[?date=YYYY-MM-DD]` picks deterministically (`days-since-epoch mod published-count` over slug order); UTC day boundary matches streak accounting. Briefly cacheable (`max-age=60`).
+- Frontend: dashboard widget wired to today's challenge (solved state, deep link). No landing hero widget, no Daily catalog tab, no archive UI — `?date=` covers historic days and past dailies stay solvable via normal challenge pages.
+- Solves go through the standard submit flow (XP, rating, streak) — no bonus, no double-count.
+- Future: admin overrides, archive UI, per-language/level variants (PRD §18).
 
-### 4. Landing page real content (conversion surface)
-**Why:** The landing page is currently a navbar + empty `<main>`. For an alpha this is fine, but the app needs a real value proposition, social proof, and a clear "start" path to convert visitors.
+### 4. Landing page real content (conversion surface) — DONE (2026-09-16)
+**Was:** The landing page was a navbar + empty `<main>`.
 
 **Shape:**
 - Hero: "Find the bug. Fix the code. Prove the fix." + subhead + primary CTA ("Start Noxing" → /signup or /challenges if logged in).
@@ -69,8 +73,8 @@ These are ordered roughly by dependency and upside. Each has a short "why" and a
 - Maybe a small testimonial / community stat line once there's data.
 - Keep the dark Framer-style design language already in DESIGN.md.
 
-### 5. Challenge discovery: list + filter + search page
-**Why:** There's a `GET /challenges` endpoint with filters (q, difficulty, language, category, tag, sort, page, limit) and a public catalog, but no `/challenges` browse page is wired yet. Users need a way to find work.
+### 5. Challenge discovery: list + filter + search page — DONE (2026-09-16)
+**Was:** `GET /challenges` existed but no `/challenges` browse page was wired.
 
 **Shape:**
 - `/challenges` page: grid/list of published challenges with title, difficulty chip, language, category, kind, estimated time, solve count, tags.
@@ -79,8 +83,8 @@ These are ordered roughly by dependency and upside. Each has a short "why" and a
 - "Continue" from recent challenges (IndexedDB already records recent views).
 - Deep link to `/challenges/[slug]` (overview) → then "Solve" → `/challenges/[slug]/solve`.
 
-### 6. Challenge overview page (read before solve)
-**Why:** The solve page lets you jump straight in, but there's no dedicated overview that shows the full description, constraints, hints, starter files preview, visible vs hidden test explanation, and "Start solving" CTA. Good for SEO and comprehension.
+### 6. Challenge overview page (read before solve) — DONE (2026-09-16)
+**Was:** The solve page was the only entry point, with no read-first overview.
 
 **Shape:**
 - `/challenges/[slug]` page: full description, kind + difficulty + category chips, constraints, hints (collapsible), starter file list, visible tests count, "Run tests" vs "Submit" explanation, author, estimated time, tags.
@@ -95,8 +99,8 @@ These are ordered roughly by dependency and upside. Each has a short "why" and a
 - Runner concurrency, sandbox, time/memory limits all reuse `common.js` — only the harness + command differ.
 - Optional: add a language metadata register so the frontend can list "available" vs "coming soon" cleanly.
 
-### 8. Solution sharing / community posts (after hidden-test pass)
-**Why:** PRD §19 — solved users can publish a write-up (title, challenge ref, explanation, solution code, language, tags, likes, comments, bookmarks). Hidden until the challenge is solved by the viewer unless discussion mode. Good retention + community knowledge.
+### 8. Solution sharing / community posts (after hidden-test pass) — DONE except bookmarks (2026-09-16)
+**Was:** No community surface existed.
 
 **Shape:**
 - New collection `solutions`: `{ challengeId, userId, title, explanation, code, language, tags, createdAt, likedBy, commentCount, bookmarkedBy }`.
@@ -104,8 +108,8 @@ These are ordered roughly by dependency and upside. Each has a short "why" and a
 - Endpoints: `POST /solutions`, `GET /solutions?challenge=slug`, `POST /solutions/:id/like`, `POST /solutions/:id/bookmark`, comments later.
 - Frontend: "Share solution" button on the post-solve result, solution tab on public profile (already stubbed as empty), solution feed on challenge overview ("accepted solutions" when you've passed).
 
-### 9. Settings page + profile editor (complete the account surface)
-**Why:** Sidebar + mobile nav both link to `/settings` (disabled "Soon"-less now), and the PRD wants profile editing. Onboarding sets basics; settings should let you update display name, bio, website, GitHub, languages, interests, avatar, and maybe privacy/notification toggles.
+### 9. Settings page + profile editor (complete the account surface) — DONE (2026-09-16)
+**Was:** `/settings` was linked but unbuilt.
 
 **Shape:**
 - `/settings` page: prefilled form from `GET /users/me`, PATCH back via `auth.updateProfile`, avatar re-upload, inline validation.
@@ -146,7 +150,7 @@ These are ordered roughly by dependency and upside. Each has a short "why" and a
 **Why:** Admin routes exist (list, create, update, publish/unpublish, delete), but there's no admin UI in the frontend — admins work via API or scripts. A lightweight admin surface speeds content authoring and daily-challenge scheduling.
 
 **Shape:**
-- `/admin` page (ADMIN+ only): challenge list with status, search, quick edit, publish toggle, hidden-test editor, daily-challenge scheduler (pick today's challenge).
+- `/admin` page (ADMIN+ only): challenge list with status, search, quick edit, publish toggle, hidden-test editor. (No daily scheduler needed — daily is auto-rotation; an override UI only if admin curation is ever wanted.)
 - Keep it simple and guarded; nothing fancier than needed.
 
 ### 15. Multi-file + larger project challenges (beyond single entry)
@@ -179,13 +183,13 @@ These are ordered roughly by dependency and upside. Each has a short "why" and a
 
 ## Dependency notes
 
-- Hidden-test submission (#1) is the gating item for "actually completing a challenge"; most gamification (#2), daily challenge (#3), solution sharing (#8), and achievements (#10) depend on it.
-- Discovery pages (#5, #6) and the landing page (#4) are independent frontend work that can land in parallel.
-- TypeScript execution (#7) is independent of the submission flow but reuses the runner/queue plumbing.
-- Security hardening (#11) and email delivery (#12) are operational; they can progress on their own schedule.
+- ~~Hidden-test submission (#1) is the gating item~~ — landed; gamification (#2), daily (#3), and solution sharing (#8) are live on top of it.
+- Remaining independent tracks: TypeScript execution (#7), achievements (#10), multi-file authoring (#15).
+- Security hardening (#11) and email delivery (#12) are operational; they can progress on their own schedule. Email delivery gates turning verification enforcement back ON.
+- Suggested next: #10 achievements (cheap retention, hooks into the passing-submission path), #12 email delivery (unblocks verification), #14 admin UI (challenge list + daily override now that rotation exists), then #7 TypeScript.
 
 ---
 
 ## How to use this doc
 
-Treat the numbered sections as a rough priority order, not a rigid sequence. Pick the next item that unblocks the most user value or the most downstream items — usually #1 (hidden-test submission + scoring), then #4/#5/#6 (discovery + landing), then #2 (rating/leaderboards) once real completions exist.
+Treat the numbered sections as a rough priority order, not a rigid sequence. Items marked DONE describe what landed and what was deliberately cut (e.g. daily admin UI, bookmarks) so future work doesn't re-litigate them.
