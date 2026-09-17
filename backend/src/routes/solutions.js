@@ -11,7 +11,8 @@ import {
   commentListQuerySchema,
 } from "../validation.js";
 import { findPublishedChallenge, findAcceptedSubmission } from "../lib/challengeFiles.js";
-import { emitChallenge, emitSolution } from "../lib/realtime.js";
+import { emitChallenge, emitSolution, emitUser } from "../lib/realtime.js";
+import { createNotification, sanitizeNotification } from "../lib/notifications.js";
 
 /**
  * Community solutions (PRD §19) — solved-only reads, live fan-out (§25).
@@ -454,6 +455,30 @@ export function createSolutionRoutes(db) {
       };
       emitSolution(req, sid.toString(), "solution:like", payload);
       emitChallenge(req, doc.challengeId.toString(), "solution:like", payload);
+      if (liked) {
+        const authors = await authorMap(db, [me.id]);
+        const card = authors.get(me.id.toString()) ?? null;
+        const who = card?.displayName ?? card?.username ?? "Someone";
+        const note = await createNotification(db, {
+          userId: doc.authorId,
+          type: "solution_like",
+          actorId: me.id,
+          actorUsername: card?.username ?? null,
+          actorDisplayName: card?.displayName ?? card?.username ?? null,
+          title: `${who} liked your solution`,
+          body: doc.title ?? "",
+          data: {
+            solutionId: sid.toString(),
+            challengeSlug: doc.challengeSlug ?? null,
+            challengeTitle: doc.challengeTitle ?? null,
+          },
+        });
+        if (note) {
+          emitUser(req, doc.authorId.toString(), "notification:new", {
+            notification: sanitizeNotification(note),
+          });
+        }
+      }
       return res.json({ liked, likeCount });
     } catch (err) {
       console.error("[solutions] like failed:", err?.message ?? err);
@@ -537,6 +562,30 @@ export function createSolutionRoutes(db) {
         emitChallenge(req, doc.challengeId.toString(), "solution:updated", {
           solution: { id: sid.toString(), commentCount },
         });
+        {
+          const card = authors.get(me.id.toString()) ?? null;
+          const who = card?.displayName ?? card?.username ?? "Someone";
+          const note = await createNotification(db, {
+            userId: doc.authorId,
+            type: "solution_comment",
+            actorId: me.id,
+            actorUsername: card?.username ?? null,
+            actorDisplayName: card?.displayName ?? card?.username ?? null,
+            title: `${who} commented on your solution`,
+            body: String(req.body.body ?? "").slice(0, 140),
+            data: {
+              solutionId: sid.toString(),
+              commentId: insertedId.toString(),
+              challengeSlug: doc.challengeSlug ?? null,
+              challengeTitle: doc.challengeTitle ?? null,
+            },
+          });
+          if (note) {
+            emitUser(req, doc.authorId.toString(), "notification:new", {
+              notification: sanitizeNotification(note),
+            });
+          }
+        }
         return res.status(201).json({ comment: payload, commentCount });
       } catch (err) {
         console.error("[comments] create failed:", err?.message ?? err);
@@ -646,6 +695,29 @@ export function createSolutionRoutes(db) {
         liked,
         actorId: me.id.toString(),
       });
+      if (liked) {
+        const authors = await authorMap(db, [me.id]);
+        const card = authors.get(me.id.toString()) ?? null;
+        const who = card?.displayName ?? card?.username ?? "Someone";
+        const note = await createNotification(db, {
+          userId: doc.authorId,
+          type: "comment_like",
+          actorId: me.id,
+          actorUsername: card?.username ?? null,
+          actorDisplayName: card?.displayName ?? card?.username ?? null,
+          title: `${who} liked your comment`,
+          body: String(doc.body ?? "").slice(0, 140),
+          data: {
+            solutionId: doc.solutionId.toString(),
+            commentId: cid.toString(),
+          },
+        });
+        if (note) {
+          emitUser(req, doc.authorId.toString(), "notification:new", {
+            notification: sanitizeNotification(note),
+          });
+        }
+      }
       return res.json({ liked, likeCount });
     } catch (err) {
       console.error("[comments] like failed:", err?.message ?? err);

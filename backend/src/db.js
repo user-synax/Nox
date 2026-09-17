@@ -169,5 +169,13 @@ export async function connectDB(uri) {
     .collection("oauthStates")
     .createIndex({ createdAt: 1 }, { expireAfterSeconds: 600, name: "oauthStates_created_ttl" });
 
+  // Notifications (PRD §21 inbox): newest-first per user + unread counts.
+  await db
+    .collection("notifications")
+    .createIndex({ userId: 1, createdAt: -1 }, { name: "notifications_user_created" });
+  await db
+    .collection("notifications")
+    .createIndex({ userId: 1, readAt: 1 }, { name: "notifications_user_unread" });
+
   return { client, db };
 }

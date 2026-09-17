@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Bell,
   ChevronRight,
   Compass,
   LayoutDashboard,
@@ -17,6 +18,8 @@ import {
   X,
 } from "lucide-react";
 import { auth } from "../lib/auth";
+import { useUnreadCount } from "../lib/useNotifications";
+import { NotificationBell, UnreadPill } from "./NotificationBell";
 import { Avatar } from "./Avatar";
 
 const HOVER =
@@ -55,6 +58,7 @@ const itemCls = (active) =>
 export function Sidebar({ user, pathname }) {
   const router = useRouter();
   const profileHref = user?.username ? `/u/${user.username}` : "/settings";
+  const { unread } = useUnreadCount();
 
   const onLogout = async () => {
     try {
@@ -152,6 +156,15 @@ export function Sidebar({ user, pathname }) {
               <Settings size={17} strokeWidth={2} aria-hidden="true" />
               Settings
             </Link>
+            <Link
+              href="/notifications"
+              aria-current={pathname === "/notifications" ? "page" : undefined}
+              className={itemCls(pathname === "/notifications")}
+            >
+              <Bell size={17} strokeWidth={2} aria-hidden="true" />
+              Notifications
+              <UnreadPill count={unread} />
+            </Link>
           </div>
         </div>
       </nav>
@@ -195,9 +208,12 @@ export function MobileTop({ user }) {
         <Link href="/dashboard" aria-label="Nox dashboard" className="Nox-focus rounded-full">
           <Logo size={32} />
         </Link>
-        <Link href={profileHref} aria-label="Your profile" className="Nox-focus block rounded-full">
-          <Avatar user={user} size={32} />
-        </Link>
+        <div className="flex items-center gap-1">
+          <NotificationBell size={20} />
+          <Link href={profileHref} aria-label="Your profile" className="Nox-focus block rounded-full">
+            <Avatar user={user} size={32} />
+          </Link>
+        </div>
       </div>
     </header>
   );
@@ -221,6 +237,7 @@ export function TabBar({ user, pathname }) {
   ];
   const more = [
     { href: "/community", label: "Community", desc: "Feed and people", Icon: Users, active: path.startsWith("/community") },
+    { href: "/notifications", label: "Notifications", desc: "Comments, likes, milestones", Icon: Bell, active: path.startsWith("/notifications") },
     { href: profileHref, label: "Profile", desc: "Your stats", Icon: User, active: path === profileHref },
     { href: "/settings", label: "Settings", desc: "Account and prefs", Icon: Settings, active: path === "/settings" },
   ];

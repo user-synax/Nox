@@ -2,7 +2,7 @@
 
 **Product:** Nox (Nox.synax.me)  
 **Niche:** Real-world debugging practice platform — developers fix intentionally broken code, pass hidden tests, earn XP/rating, and build a public debugging profile.  
-**Current Status:** Late alpha — core loop complete (auth, catalog, Monaco workspace, visible runs, hidden-submit judging, XP/rating/ranks, leaderboards, streaks, daily challenge, solutions + realtime, landing, discovery, settings). Open: TS execution, notifications, moderation/reports/bookmarks, admin UI, achievements, email delivery, sandbox hardening.  
+**Current Status:** Late alpha — core loop complete (auth, catalog, Monaco workspace, visible runs, hidden-submit judging, XP/rating/ranks, leaderboards, streaks, daily challenge, solutions + realtime, notifications inbox, landing, discovery, settings). Open: TS execution, moderation/reports/bookmarks, admin UI, email delivery, sandbox hardening.  
 **Last Updated:** 2026-09-16
 
 ---

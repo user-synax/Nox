@@ -799,7 +799,13 @@ Notifications should have read/unread state.
 
 Socket.IO is live and used for community fan-out (solution/comment events on `challenge:<id>` and `solution:<id>` rooms) with best-effort session attach; sockets only ever receive, all writes go through REST.
 
-There is no notification center yet, so there is nothing to persist or deliver. Submission/run progress is REST polling (`GET /runs/:id`, `GET /submissions/:id`), not sockets.
+There is a notification center: persisted `notifications` collection
+(`GET /notifications`, `GET /notifications/unread-count`,
+`POST /notifications/read`), inbox page at `/notifications` with sidebar
+badge + mobile bell. API-process events (comments, likes) also emit a live
+`notification:new` hint on the recipient's auto-joined `user:<id>` room;
+worker-written rows (achievements, rank-ups) arrive via polling.
+Submission/run progress is REST polling (`GET /runs/:id`, `GET /submissions/:id`), not sockets.
 
 ---
 
@@ -1348,7 +1354,13 @@ GET /leaderboard/ranks             # rank ladder + XP tuning (client mirror sour
 
 ## Notifications
 
-Not built — no endpoints, no notification center.
+```text
+GET    /notifications                # newest first + unread count
+GET    /notifications/unread-count   # light bell poll
+POST   /notifications/read           # { ids[] } and/or { all: true }
+```
+
+Inbox page at `/notifications`; bell (mobile top bar) + badge (sidebar YOU).
 
 ## Admin (ADMIN+, API only — no admin UI)
 
@@ -1725,7 +1737,7 @@ Status as of 2026-09-16 (`[x]` done, `[~]` partial, `[ ]` open). Nox MVP is cons
 16. [x] Appear on a leaderboard.
 17. [x] Publish a solution after successful completion.
 18. [x] Comment on another solution.
-19. [ ] Receive an in-app notification.
+19. [x] Receive an in-app notification.
 20. [~] Have admins manage challenges and moderate content. (Challenge admin via API only; no moderation endpoints or admin UI.)
 
 ---
@@ -1765,7 +1777,6 @@ Explicitly still deferred:
 - TypeScript execution.
 - Bookmarks.
 - Reports.
-- In-app notifications.
 - Admin dashboard.
 - Basic moderation.
 - Audit logs.

@@ -15,6 +15,7 @@ import { createRunRoutes } from "./routes/runs.js";
 import { createSubmissionRoutes } from "./routes/submissions.js";
 import { createLeaderboardRoutes } from "./routes/leaderboard.js";
 import { createSolutionRoutes } from "./routes/solutions.js";
+import { createNotificationRoutes } from "./routes/notifications.js";
 import { assertEmailReady } from "./lib/email.js";
 import { initRealtime } from "./lib/realtime.js";
 
@@ -106,6 +107,10 @@ app.use("/api", createLeaderboardRoutes(db));
 // Community solutions + comments + likes (PRD §19, solved-only reads).
 app.use(createSolutionRoutes(db));
 app.use("/api", createSolutionRoutes(db));
+
+// In-app notifications inbox (PRD §21).
+app.use(createNotificationRoutes(db));
+app.use("/api", createNotificationRoutes(db));
 
 app.get("/api/health", async (_req, res) => {
   // Execution liveness rides along: counts only, nothing sensitive.

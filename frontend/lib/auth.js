@@ -280,6 +280,17 @@ export const auth = {
   getChallenge: (slug) => request(`/challenges/${encodeURIComponent(slug)}`),
   /** Achievement catalog + viewer's unlocked keys (anonymous: catalog only). */
   achievementsCatalog: () => request("/achievements"),
+  /** Notifications inbox — newest first + unread count. */
+  listNotifications: (page = 1, limit = 20) =>
+    request(`/notifications?page=${page}&limit=${limit}`),
+  /** Light bell poll → { unread }. */
+  unreadCount: () => request("/notifications/unread-count"),
+  /** Mark read — { ids[] } and/or { all: true } → { read, unread }. */
+  markNotificationsRead: ({ ids, all } = {}) =>
+    request("/notifications/read", {
+      method: "POST",
+      body: { ...(ids ? { ids } : {}), ...(all ? { all: true } : {}) },
+    }),
   /** Daily challenge — today's canonical pick (UTC auto-rotation).
    *  Optional date: "YYYY-MM-DD" for a historic day. */
   getDailyChallenge: (date) =>

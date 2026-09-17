@@ -2,6 +2,8 @@ import {
   XP_TABLE,
   REPEAT_XP,
   REJECT_RATING_COST,
+  RANKS,
+  rankFor,
   eloWinDelta,
   scoreSubmission,
   levelFor,
@@ -11,6 +13,7 @@ import {
   achievementByKey,
   evaluateAchievements,
 } from "./achievements.js";
+import { createNotification } from "../src/lib/notifications.js";
 import { defaultProfileStats } from "../src/lib/stats.js";
 
 /**
@@ -222,6 +225,54 @@ export async function judgeSubmit(db, job, exec) {
         createdAt: now,
       })
       .catch(() => {});
+  }
+
+  // Inbox notifications (PRD 21). The worker has no Socket.IO handle,
+  // so these are DB writes only — the bell picks them up via polling
+  // (API-process events additionally get a live notification:new hint).
+  if (status === "accepted") {
+    if (achievementsUnlocked.length > 0) {
+      const names = achievementsUnlocked.map((a) => a.name);
+      await createNotification(db, {
+        userId: job.userId,
+        type: "achievement",
+        title:
+          achievementsUnlocked.length === 1
+            ? `Achievement unlocked: ${names[0]}`
+            : `${achievementsUnlocked.length} achievements unlocked`,
+        body:
+          achievementsUnlocked.length === 1
+            ? (achievementsUnlocked[0].description ?? "")
+            : names.join(" - "),
+        data: {
+          keys: achievementsUnlocked.map((a) => a.key),
+          challengeSlug: job.challengeSlug ?? null,
+          challengeTitle: job.challengeTitle ?? null,
+        },
+      });
+    }
+    // Rank-up: tier promotion only (same-tier gains stay quiet).
+    const oldRank = rankFor(newRating - ratingDelta);
+    const nextRank = rankFor(newRating);
+    if (oldRank !== nextRank) {
+      const oldIdx = RANKS.findIndex((r) => r.name === oldRank);
+      const newIdx = RANKS.findIndex((r) => r.name === nextRank);
+      if (newIdx !== -1 && oldIdx !== -1 && newIdx < oldIdx) {
+        await createNotification(db, {
+          userId: job.userId,
+          type: "rank_up",
+          title: `Promoted to ${nextRank}`,
+          body: `Rating ${newRating} - cleared ${oldRank} on ${job.challengeTitle ?? "a challenge"}.`,
+          data: {
+            oldRank,
+            newRank: nextRank,
+            rating: newRating,
+            challengeSlug: job.challengeSlug ?? null,
+            challengeTitle: job.challengeTitle ?? null,
+          },
+        });
+      }
+    }
   }
 
   // Single terminal transition for the immutable submission.

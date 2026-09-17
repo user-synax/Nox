@@ -8,6 +8,8 @@ import { getSessionUser } from "./session.js";
  * Rooms:
  *   challenge:<challengeId>  → solution list events + count updates
  *   solution:<solutionId>     → thread events for the open solution
+ *   user:<userId>             → private inbox hints (notification:new),
+ *                               auto-joined for authed sockets
  *
  * Auth is best-effort: the session cookie is verified via Better Auth when
  * present (socket.data.userId), otherwise the socket stays anonymous and
@@ -23,6 +25,10 @@ export function roomForChallenge(challengeId) {
 
 export function roomForSolution(solutionId) {
   return `solution:${String(solutionId)}`;
+}
+
+export function roomForUser(userId) {
+  return `user:${String(userId)}`;
 }
 
 export function initRealtime(httpServer, db) {
@@ -44,6 +50,10 @@ export function initRealtime(httpServer, db) {
   });
 
   io.on("connection", (socket) => {
+    // Authed sockets auto-join their private inbox room (notifications).
+    if (socket.data.userId) {
+      socket.join(roomForUser(socket.data.userId));
+    }
     const challengeRooms = (msg = {}) =>
       [msg?.challengeId, ...(msg?.challengeIds ?? [])]
         .map((c) => String(c ?? ""))
@@ -80,4 +90,9 @@ export function emitChallenge(req, challengeId, event, payload) {
 
 export function emitSolution(req, solutionId, event, payload) {
   ioOf(req)?.to(roomForSolution(solutionId))?.emit(event, payload);
+}
+
+/** Private inbox hint — recipient's user:<id> room only. */
+export function emitUser(req, userId, event, payload) {
+  ioOf(req)?.to(roomForUser(userId))?.emit(event, payload);
 }
