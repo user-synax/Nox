@@ -160,6 +160,14 @@ export const auth = {
   /** Public profile — no session needed. */
   publicProfile: (username) =>
     request(`/users/${encodeURIComponent(username)}`),
+  /** Own daily solve counts → { days: [{ date, count }], total, start, end }. */
+  myActivity: (days = 365) =>
+    request(`/users/me/activity?days=${encodeURIComponent(String(days))}`),
+  /** Public daily solve counts — no session needed. */
+  userActivity: (username, days = 365) =>
+    request(
+      `/users/${encodeURIComponent(username)}/activity?days=${encodeURIComponent(String(days))}`
+    ),
   /** Queue a visible-test run → 202 { runId }. files: [{ path, content }]. */
   runTests: (ref, files) =>
     request(`/challenges/${encodeURIComponent(ref)}/run`, {

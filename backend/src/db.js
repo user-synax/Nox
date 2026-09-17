@@ -80,6 +80,13 @@ export async function connectDB(uri) {
   await db
     .collection("submissions")
     .createIndex({ userId: 1, createdAt: -1 }, { name: "submissions_user_created" });
+  // Daily solve activity graph (users.js /activity): accepted solves per UTC day.
+  await db
+    .collection("submissions")
+    .createIndex(
+      { userId: 1, status: 1, completedAt: -1 },
+      { name: "submissions_user_status_completed" }
+    );
   await db
     .collection("ratingEvents")
     .createIndex({ createdAt: -1 }, { name: "ratingEvents_created" });

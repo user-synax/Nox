@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Trophy } from "lucide-react";
 import { auth, LANGUAGES, INTERESTS } from "../../../lib/auth";
 import {
@@ -140,12 +140,33 @@ export default function LeaderboardPage() {
     pill.style.transition = prev;
   }, [board, mounted]);
 
+  /* Keep the active tab visible inside the scrollable strip.
+     block:"nearest" never yanks the page — only the strip pans. */
+  const scrollTabIntoView = useCallback((index) => {
+    const el = tabRefs.current[index];
+    if (!el) return;
+    const reduce =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    try {
+      el.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+        behavior: reduce ? "auto" : "smooth",
+      });
+    } catch {
+      /* older engines without smooth scroll — strip stays swipeable */
+    }
+  }, []);
+
   const selectBoard = (slug) => {
     if (slug === board) return;
     setLoading(true);
     setFailed(false);
     setBoard(slug);
     setPage(1);
+    scrollTabIntoView(BOARDS.findIndex((b) => b.slug === slug));
   };
 
   const selectTrack = (setter, value) => {
@@ -180,7 +201,9 @@ export default function LeaderboardPage() {
                 : `XP earned in ${category} challenges.`}
       </p>
 
-      <div className="t-tabs mt-6" role="tablist" aria-label="Leaderboard types">
+      {/* Tabs — scrollable strip on narrow screens so the five boards
+          never overflow the page and shift the layout right. */}
+      <div className="t-tabs Nox-tabs-scroll mt-6" role="tablist" aria-label="Leaderboard types">
         <span ref={pillRef} aria-hidden="true" className="t-tabs-pill" />
         {BOARDS.map((b, i) => (
           <button

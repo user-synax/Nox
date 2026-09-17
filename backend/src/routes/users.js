@@ -90,6 +90,71 @@ function normalizeText(value) {
   return trimmed === "" ? null : trimmed;
 }
 
+/* ── Daily solve activity (contribution graph) ────────────────────
+ * Source of truth: accepted submissions (one per solved challenge —
+ * re-submits are locked after a solve, so each accepted row is a
+ * distinct challenge cracked). Grouped by UTC day on
+ * completedAt ?? createdAt so the graph matches GitHub/LeetCode
+ * semantics: hover a cell → "N solves on <date>".
+ */
+
+function parseActivityDays(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 365;
+  return Math.min(730, Math.max(7, Math.floor(n)));
+}
+
+function utcMidnight(date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function toDateKey(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+async function dailySolveCounts(db, userObjectId, days) {
+  const end = utcMidnight(new Date());
+  const start = new Date(end.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+
+  let buckets = [];
+  try {
+    buckets = await db
+      .collection("submissions")
+      .aggregate([
+        { $match: { userId: userObjectId, status: "accepted" } },
+        {
+          $project: {
+            solvedAt: { $ifNull: ["$completedAt", "$createdAt"] },
+          },
+        },
+        { $match: { solvedAt: { $gte: start } } },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: "%Y-%m-%d", date: "$solvedAt", timezone: "UTC" },
+            },
+            count: { $sum: 1 },
+          },
+        },
+      ])
+      .toArray();
+  } catch {
+    buckets = [];
+  }
+
+  const byDay = new Map(buckets.map((b) => [b._id, b.count]));
+  const out = [];
+  let total = 0;
+  for (let i = 0; i < days; i++) {
+    const day = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+    const date = toDateKey(day);
+    const count = byDay.get(date) ?? 0;
+    total += count;
+    out.push({ date, count });
+  }
+  return { days: out, total, start: toDateKey(start), end: toDateKey(end) };
+}
+
 /** Applies a validated profile payload. Returns fresh { userDoc, statsDoc }. */
 async function applyProfileUpdate(db, userId, data) {
   const now = new Date();
@@ -240,6 +305,44 @@ export function createUserRoutes(db) {
       }
     }
   );
+
+  // Own daily solve counts — powers the dashboard contribution graph.
+  // Registered BEFORE /users/:username/activity so "me" never hits the param route.
+  router.get("/users/me/activity", async (req, res) => {
+    const userId = await requireUserId(req, res);
+    if (!userId) return;
+    try {
+      const days = parseActivityDays(req.query.days);
+      const { days: list, total, start, end } = await dailySolveCounts(db, userId, days);
+      return res.json({ days: list, total, start, end, rangeDays: days });
+    } catch (err) {
+      console.error("[users] me activity failed:", err?.message ?? err);
+      return res.status(500).json({ error: "Could not load activity." });
+    }
+  });
+
+  // Public daily solve counts — powers the /u/[username] contribution graph.
+  // No session needed (solve dates + counts only, no code).
+  router.get("/users/:username/activity", async (req, res) => {
+    try {
+      const username = String(req.params.username ?? "").toLowerCase();
+      if (!username || username === "me") {
+        return res.status(404).json({ error: "User not found." });
+      }
+      const userDoc = await db.collection("user").findOne({ username });
+      if (!userDoc) return res.status(404).json({ error: "User not found." });
+      const days = parseActivityDays(req.query.days);
+      const { days: list, total, start, end } = await dailySolveCounts(
+        db,
+        userDoc._id,
+        days
+      );
+      return res.json({ username, days: list, total, start, end, rangeDays: days });
+    } catch (err) {
+      console.error("[users] public activity failed:", err?.message ?? err);
+      return res.status(500).json({ error: "Could not load activity." });
+    }
+  });
 
   // Public profile — registered AFTER /users/me so “me” never hits this.
   router.get("/users/:username", async (req, res) => {

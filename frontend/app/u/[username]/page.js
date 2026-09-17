@@ -23,6 +23,7 @@ import { auth, rankFor } from "../../../lib/auth";
 import { Avatar } from "../../../components/Avatar";
 import { RankBadge } from "../../../components/Leaderboard";
 import { SolutionCard } from "../../../components/Solutions";
+import { SolveActivityGraph } from "../../../components/SolveActivityGraph";
 import { StatNumber } from "../../../components/Stat";
 
 const HOVER =
@@ -375,6 +376,17 @@ export default function PublicProfilePage({ params }) {
               <div className="mt-4">
                 {tab === 0 ? (
                   <div className="flex flex-col gap-4">
+                    <section aria-label="Solve activity" className="rounded-xl bg-surface-1 p-5">
+                      <h2 className="text-[13px] font-medium tracking-[-0.13px] text-ink-muted">
+                        Solve activity
+                      </h2>
+                      <div className="mt-3">
+                        <SolveActivityGraph
+                          key={data.user.username}
+                          username={data.user.username}
+                        />
+                      </div>
+                    </section>
                     <AchievementsSection catalog={catalog} unlocked={data.achievements} />
                     {(data.stats?.preferredLanguages?.length ?? 0) > 0 ? (
                       <section className="rounded-xl bg-surface-1 p-5">

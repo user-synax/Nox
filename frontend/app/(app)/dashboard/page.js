@@ -22,6 +22,7 @@ import {
 } from "../../../components/Leaderboard";
 import { auth, rankFor, rankProgress } from "../../../lib/auth";
 import { getRecent } from "../../../lib/workspace";
+import { SolveActivityGraph } from "../../../components/SolveActivityGraph";
 
 const HOVER =
   "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]";
@@ -228,6 +229,16 @@ export default function DashboardPage() {
           }
         />
       </div>
+
+      {/* Solve activity — daily accepted solves, GitHub/LeetCode style */}
+      <section aria-label="Solve activity" className="mt-2 rounded-xl bg-surface-1 p-5">
+        <h2 className="text-[15px] font-medium tracking-[-0.15px] text-ink">
+          Solve activity
+        </h2>
+        <div className="mt-3">
+          <SolveActivityGraph />
+        </div>
+      </section>
 
       {/* Main column + leaderboard rail */}
       <div className="mt-2 grid items-start gap-2 xl:grid-cols-[minmax(0,1fr)_320px]">
