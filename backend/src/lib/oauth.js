@@ -4,6 +4,7 @@ import { defaultProfileStats } from "./stats.js";
 import { socialUsernameBase, uniqueUsername } from "./usernames.js";
 import { createSession, setSessionCookie, requestMeta } from "./session.js";
 import { emailDomainAllowed, ALLOWED_EMAIL_DOMAINS } from "../validation.js";
+import { suspensionOf } from "./moderation.js";
 
 /**
  * Google OAuth code flow — hand-rolled, no auth library.
@@ -223,6 +224,18 @@ export async function googleCallback(db, req, res) {
         .collection("user")
         .updateOne({ _id: userDoc._id }, { $set: { emailVerified: true, updatedAt: now } })
         .catch(() => {});
+    }
+
+    // Suspended accounts can't slip back in through Google — the login
+    // page already renders ?error= + error_description generically.
+    const suspension = suspensionOf(userDoc);
+    if (suspension.suspended) {
+      return failWith(
+        "account_suspended",
+        suspension.reason
+          ? `This account is suspended: ${suspension.reason}`
+          : "This account is suspended."
+      );
     }
 
     const meta = requestMeta(req);

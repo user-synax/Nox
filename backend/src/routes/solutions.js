@@ -13,6 +13,7 @@ import {
 import { findPublishedChallenge, findAcceptedSubmission } from "../lib/challengeFiles.js";
 import { emitChallenge, emitSolution, emitUser } from "../lib/realtime.js";
 import { createNotification, sanitizeNotification } from "../lib/notifications.js";
+import { isModerator } from "../lib/moderation.js";
 
 /**
  * Community solutions (PRD §19) — solved-only reads, live fan-out (§25).
@@ -47,6 +48,24 @@ function isAdmin(roles) {
   return Array.isArray(roles) && roles.some((r) => r === "ADMIN" || r === "FOUNDER");
 }
 
+/** MODERATOR and above — shared rank semantics with routes/moderation.js. */
+function isMod(roles) {
+  return isModerator(roles);
+}
+
+/**
+ * Hidden content is invisible to regular users (404, never a 403 that
+ * leaks existence). Moderators always pass (they must review reported
+ * posts); owners pass for their own post detail so a takedown isn't
+ * a confusing disappearance (they're notified with the reason).
+ */
+function hiddenBlock(doc, me, { ownerBypass = false } = {}) {
+  if (!doc?.hiddenAt) return false;
+  if (me && isMod(me.roles)) return false;
+  if (ownerBypass && me && doc.authorId?.toString?.() === me.id.toString()) return false;
+  return true;
+}
+
 async function requireUser(db, req, res) {
   const found = await getSessionUser(db, req, res);
   if (!found) {
@@ -63,12 +82,28 @@ async function optionalUser(db, req) {
   return { id: found.user._id, roles: found.user.roles ?? [] };
 }
 
-/** Solved ⇔ accepted submission exists. Authors/admins bypass. */
+/** Solved ⇔ accepted submission exists. Authors/staff bypass. */
 async function canRead(db, me, challenge, authorId = null) {
+  // Moderators review reported posts without solving first — the report
+  // queue is useless if they hit the solved gate on every item.
+  if (me && isMod(me.roles)) return true;
   if (me && isAdmin(me.roles)) return true;
   if (me && authorId && me.id.toString() === authorId.toString()) return true;
   if (!me) return false;
   return !!(await findAcceptedSubmission(db, me.id, challenge._id));
+}
+
+/** Parent-solution takedown freezes its whole thread for regular users. */
+async function parentSolutionHidden(db, solutionId, me) {
+  if (me && isMod(me.roles)) return false;
+  try {
+    const parent = await db
+      .collection("solutions")
+      .findOne({ _id: solutionId }, { projection: { hiddenAt: 1 } });
+    return !!parent?.hiddenAt;
+  } catch {
+    return false;
+  }
 }
 
 function deny(res, challenge = null) {
@@ -115,7 +150,7 @@ async function likedSet(db, me, targetType, targetIds) {
   return new Set(rows.map((r) => r.targetId.toString()));
 }
 
-function sanitizeSolution(doc, { author = null, liked = false, detail = false } = {}) {
+function sanitizeSolution(doc, { author = null, liked = false, detail = false, mod = false } = {}) {
   if (!doc) return null;
   const base = {
     id: doc._id?.toString?.() ?? doc.id,
@@ -128,12 +163,20 @@ function sanitizeSolution(doc, { author = null, liked = false, detail = false } 
     likeCount: doc.likeCount ?? 0,
     commentCount: doc.commentCount ?? 0,
     likedByMe: !!liked,
+    hidden: !!doc.hiddenAt,
     author,
     createdAt: doc.createdAt ?? null,
     updatedAt: doc.updatedAt ?? null,
   };
   if (detail) {
-    return { ...base, body: doc.body ?? "", code: doc.code ?? "" };
+    return {
+      ...base,
+      body: doc.body ?? "",
+      code: doc.code ?? "",
+      // The takedown reason is staff-only — realtime fan-out payloads
+      // never pass mod:true, so it can't leak to room subscribers.
+      ...(mod && doc.hiddenAt ? { hiddenReason: doc.hiddenReason ?? null } : {}),
+    };
   }
   return { ...base, excerpt: String(doc.body ?? "").slice(0, 200) };
 }
@@ -146,6 +189,7 @@ function sanitizeComment(doc, { author = null, liked = false } = {}) {
     body: doc.body ?? "",
     likeCount: doc.likeCount ?? 0,
     likedByMe: !!liked,
+    hidden: !!doc.hiddenAt,
     author,
     createdAt: doc.createdAt ?? null,
     updatedAt: doc.updatedAt ?? null,
@@ -233,6 +277,9 @@ export function createSolutionRoutes(db) {
             ? { likeCount: -1, createdAt: -1 }
             : { createdAt: -1 };
         const filter = { challengeId: challenge._id };
+        // Hidden posts vanish from public lists (moderators still see them).
+        // hiddenAt:null matches old docs that predate the field.
+        if (!isMod(me?.roles)) filter.hiddenAt = null;
         const [rows, total] = await Promise.all([
           solutions()
             .find(filter)
@@ -269,7 +316,7 @@ export function createSolutionRoutes(db) {
       const page = Math.min(100, Math.max(1, Number(req.query.page) || 1));
       const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
       const filter = {};
-      if (!isAdmin(me.roles)) {
+      if (!isMod(me.roles)) {
         // Solved-only: feed covers exactly the challenges I cracked.
         const accepted = await db
           .collection("submissions")
@@ -282,6 +329,7 @@ export function createSolutionRoutes(db) {
           .filter(Boolean);
         if (cids.length === 0) return res.json({ items: [], total: 0, page, limit });
         filter.challengeId = { $in: cids };
+        filter.hiddenAt = null;
       }
       const [rows, total] = await Promise.all([
         solutions()
@@ -321,6 +369,9 @@ export function createSolutionRoutes(db) {
       if (!sid) return res.status(404).json({ error: "Solution not found." });
       const doc = await solutions().findOne({ _id: sid });
       if (!doc) return res.status(404).json({ error: "Solution not found." });
+      if (hiddenBlock(doc, me, { ownerBypass: true })) {
+        return res.status(404).json({ error: "Solution not found." });
+      }
       const challenge = await db.collection("challenges").findOne({ _id: doc.challengeId });
       if (!challenge || !(await canRead(db, me, challenge, doc.authorId))) return deny(res, challenge);
       const [authors, liked] = await Promise.all([
@@ -332,6 +383,7 @@ export function createSolutionRoutes(db) {
           author: authors.get(doc.authorId?.toString?.()) ?? null,
           liked: liked.has(doc._id.toString()),
           detail: true,
+          mod: isMod(me?.roles),
         }),
       });
     } catch (err) {
@@ -428,6 +480,7 @@ export function createSolutionRoutes(db) {
       if (!sid) return res.status(404).json({ error: "Solution not found." });
       const doc = await solutions().findOne({ _id: sid });
       if (!doc) return res.status(404).json({ error: "Solution not found." });
+      if (hiddenBlock(doc, me)) return res.status(404).json({ error: "Solution not found." });
       const challenge = await db.collection("challenges").findOne({ _id: doc.challengeId });
       if (!challenge || !(await canRead(db, me, challenge, doc.authorId))) return deny(res, challenge);
       let liked;
@@ -497,17 +550,20 @@ export function createSolutionRoutes(db) {
         if (!sid) return res.status(404).json({ error: "Solution not found." });
         const doc = await solutions().findOne({ _id: sid });
         if (!doc) return res.status(404).json({ error: "Solution not found." });
+        if (hiddenBlock(doc, me)) return res.status(404).json({ error: "Solution not found." });
         const challenge = await db.collection("challenges").findOne({ _id: doc.challengeId });
         if (!challenge || !(await canRead(db, me, challenge, doc.authorId))) return deny(res, challenge);
         const q = req.query;
+        const threadFilter = { solutionId: sid };
+        if (!isMod(me?.roles)) threadFilter.hiddenAt = null;
         const [rows, total] = await Promise.all([
           comments()
-            .find({ solutionId: sid })
+            .find(threadFilter)
             .sort({ createdAt: 1 })
             .skip((q.page - 1) * q.limit)
             .limit(q.limit)
             .toArray(),
-          comments().countDocuments({ solutionId: sid }),
+          comments().countDocuments(threadFilter),
         ]);
         const [authors, liked] = await Promise.all([
           authorMap(db, rows.map((r) => r.authorId)),
@@ -539,6 +595,7 @@ export function createSolutionRoutes(db) {
         if (!sid) return res.status(404).json({ error: "Solution not found." });
         const doc = await solutions().findOne({ _id: sid });
         if (!doc) return res.status(404).json({ error: "Solution not found." });
+        if (hiddenBlock(doc, me)) return res.status(404).json({ error: "Solution not found." });
         const challenge = await db.collection("challenges").findOne({ _id: doc.challengeId });
         if (!challenge || !(await canRead(db, me, challenge, doc.authorId))) return deny(res, challenge);
         const now = new Date();
@@ -606,6 +663,10 @@ export function createSolutionRoutes(db) {
       if (!owner && !isAdmin(me.roles)) {
         return res.status(404).json({ error: "Comment not found." });
       }
+      if (hiddenBlock(doc, me)) return res.status(404).json({ error: "Comment not found." });
+      if (await parentSolutionHidden(db, doc.solutionId, me)) {
+        return res.status(404).json({ error: "Comment not found." });
+      }
       await comments().updateOne(
         { _id: cid },
         { $set: { body: req.body.body, updatedAt: new Date() } }
@@ -634,6 +695,10 @@ export function createSolutionRoutes(db) {
       if (!doc) return res.status(404).json({ error: "Comment not found." });
       const owner = doc.authorId?.toString?.() === me.id.toString();
       if (!owner && !isAdmin(me.roles)) {
+        return res.status(404).json({ error: "Comment not found." });
+      }
+      if (hiddenBlock(doc, me)) return res.status(404).json({ error: "Comment not found." });
+      if (await parentSolutionHidden(db, doc.solutionId, me)) {
         return res.status(404).json({ error: "Comment not found." });
       }
       await Promise.all([
@@ -668,6 +733,9 @@ export function createSolutionRoutes(db) {
       if (!doc) return res.status(404).json({ error: "Comment not found." });
       const solution = await solutions().findOne({ _id: doc.solutionId });
       if (!solution) return res.status(404).json({ error: "Comment not found." });
+      if (hiddenBlock(doc, me) || hiddenBlock(solution, me)) {
+        return res.status(404).json({ error: "Comment not found." });
+      }
       const challenge = await db.collection("challenges").findOne({ _id: solution.challengeId });
       if (!challenge || !(await canRead(db, me, challenge, solution.authorId)))
         return deny(res, challenge);
@@ -779,13 +847,16 @@ export function createSolutionRoutes(db) {
         .toArray();
       const totalAll = await solutions().countDocuments({ authorId: author._id });
 
-      // Owner/admin see everything; others only challenges they solved.
-      let visible = rows;
+      // Owner/staff see everything (hidden posts included, flagged);
+      // others see only non-hidden posts from challenges they solved.
+      const isOwner = !!me && me.id.toString() === author._id.toString();
+      const seeHidden = isOwner || isMod(me?.roles);
+      let visible = seeHidden ? rows : rows.filter((r) => !r.hiddenAt);
       let unlocked = true;
-      if (!me || (me.id.toString() !== author._id.toString() && !isAdmin(me.roles))) {
+      if (!me || (!isOwner && !isMod(me.roles))) {
         unlocked = false;
-        if (me && rows.length > 0) {
-          const cids = [...new Set(rows.map((r) => r.challengeId.toString()))].map(toId).filter(Boolean);
+        if (me && visible.length > 0) {
+          const cids = [...new Set(visible.map((r) => r.challengeId.toString()))].map(toId).filter(Boolean);
           const accepted = await db
             .collection("submissions")
             .find({ userId: me.id, challengeId: { $in: cids }, status: "accepted" })
@@ -793,7 +864,7 @@ export function createSolutionRoutes(db) {
             .toArray()
             .catch(() => []);
           const solved = new Set(accepted.map((a) => a.challengeId.toString()));
-          visible = rows.filter((r) => solved.has(r.challengeId.toString()));
+          visible = visible.filter((r) => solved.has(r.challengeId.toString()));
         } else {
           visible = [];
         }

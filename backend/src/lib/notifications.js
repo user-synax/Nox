@@ -15,6 +15,13 @@ export const NOTIFICATION_TYPES = [
   "comment_like",
   "achievement",
   "rank_up",
+  // Moderation (PRD §23) — users are told when their content or account
+  // is actioned, with the reason inline. No actor is attached (the team
+  // acts as one voice); createNotification's self-skip is bypassed by
+  // passing no actorId.
+  "content_moderated",
+  "account_suspended",
+  "account_restored",
 ];
 
 function toOid(value) {

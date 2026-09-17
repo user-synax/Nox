@@ -23,6 +23,7 @@ import { auth, rankFor } from "../../../lib/auth";
 import { Avatar } from "../../../components/Avatar";
 import { RankBadge } from "../../../components/Leaderboard";
 import { SolutionCard } from "../../../components/Solutions";
+import { ReportButton } from "../../../components/ReportDialog";
 import { SolveActivityGraph } from "../../../components/SolveActivityGraph";
 import { StatNumber } from "../../../components/Stat";
 
@@ -129,6 +130,7 @@ export default function PublicProfilePage({ params }) {
   const [data, setData] = useState(null);
   const [missing, setMissing] = useState(false);
   const [isOwn, setIsOwn] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
   const [tab, setTab] = useState(0);
   const [solItems, setSolItems] = useState([]);
   const [solTotal, setSolTotal] = useState(0);
@@ -149,6 +151,7 @@ export default function PublicProfilePage({ params }) {
       if (pub.status === "fulfilled") {
         setData(pub.value);
         const meUser = me.status === "fulfilled" ? me.value?.user : null;
+        if (meUser) setSignedIn(true);
         if (meUser?.username === pub.value.user.username) setIsOwn(true);
       } else {
         setMissing(true);
@@ -252,6 +255,14 @@ export default function PublicProfilePage({ params }) {
               >
                 Edit profile
               </Link>
+            ) : signedIn && data?.user?.id ? (
+              <span className="inline-flex min-h-[40px] items-center rounded-pill bg-surface-1 px-2">
+                <ReportButton
+                  targetType="user"
+                  targetId={data.user.id}
+                  label={`Report @${data.user.username}`}
+                />
+              </span>
             ) : null}
           </div>
 
@@ -455,7 +466,12 @@ export default function PublicProfilePage({ params }) {
                   ) : (
                     <div className="flex flex-col gap-2">
                       {solItems.map((s) => (
-                        <SolutionCard key={s.id} solution={s} onLike={toggleProfileLike} />
+                        <SolutionCard
+                          key={s.id}
+                          solution={s}
+                          onLike={toggleProfileLike}
+                          reportable={signedIn && !isOwn}
+                        />
                       ))}
                       {solTotal > solItems.length ? (
                         <p className="Nox-mono py-2 text-center text-[12px] text-ink-muted">

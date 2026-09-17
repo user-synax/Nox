@@ -303,7 +303,78 @@ export const auth = {
    *  Optional date: "YYYY-MM-DD" for a historic day. */
   getDailyChallenge: (date) =>
     request(`/daily-challenge${date ? `?date=${encodeURIComponent(date)}` : ""}`),
+  // ── Reports (PRD §23 — any signed-in user can file) ──
+  /** Flag a solution/comment/user → 201 { report }. 409 when already reported. */
+  createReport: ({ targetType, targetId, reason, details }) =>
+    request("/reports", {
+      method: "POST",
+      body: { targetType, targetId, reason, ...(details ? { details } : {}) },
+    }),
+  // ── Moderation (staff only — the API re-checks roles server-side) ──
+  /** Review queue — status: open | upheld | dismissed | all. */
+  adminReports: (status = "open", page = 1, limit = 20) =>
+    request(
+      `/admin/reports?status=${encodeURIComponent(status)}&page=${page}&limit=${limit}`
+    ),
+  /** Uphold or dismiss → { report }. */
+  reviewReport: (id, { status, note }) =>
+    request(`/admin/reports/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: { status, ...(note ? { note } : {}) },
+    }),
+  /** Reversible takedown → { id, hidden, reportsResolved }. */
+  hideSolution: (id, reason) =>
+    request(`/admin/solutions/${encodeURIComponent(id)}/hide`, {
+      method: "POST",
+      body: { reason },
+    }),
+  unhideSolution: (id) =>
+    request(`/admin/solutions/${encodeURIComponent(id)}/unhide`, { method: "POST" }),
+  hideComment: (id, reason) =>
+    request(`/admin/comments/${encodeURIComponent(id)}/hide`, {
+      method: "POST",
+      body: { reason },
+    }),
+  unhideComment: (id) =>
+    request(`/admin/comments/${encodeURIComponent(id)}/unhide`, { method: "POST" }),
+  /** User search (username/email/displayName). */
+  adminUsers: (q = "", page = 1, limit = 20) =>
+    request(
+      `/admin/users?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`
+    ),
+  /** Suspend — days omitted = indefinite. Kills every session. */
+  suspendUser: (id, { reason, days }) =>
+    request(`/admin/users/${encodeURIComponent(id)}/suspend`, {
+      method: "POST",
+      body: { reason, ...(days ? { days } : {}) },
+    }),
+  unsuspendUser: (id) =>
+    request(`/admin/users/${encodeURIComponent(id)}/unsuspend`, { method: "POST" }),
+  /** Role grants (ADMIN+; FOUNDER is script-only). */
+  updateUserRoles: (id, roles) =>
+    request(`/admin/users/${encodeURIComponent(id)}/roles`, {
+      method: "PATCH",
+      body: { roles },
+    }),
+  /** Audit trail, newest first. */
+  adminAudit: (page = 1, limit = 20) =>
+    request(`/admin/audit?page=${page}&limit=${limit}`),
+  /** Queue counts for the admin header. */
+  adminOverview: () => request("/admin/overview"),
 };
+
+/** Staff check — mirrors the API floor (MODERATOR+). Convenience only:
+ *  every admin endpoint re-verifies roles server-side. */
+export function isStaff(user) {
+  const roles = user?.roles ?? [];
+  return roles.includes("MODERATOR") || roles.includes("ADMIN") || roles.includes("FOUNDER");
+}
+
+/** Role grants live behind ADMIN+ (moderators review, admins govern). */
+export function isAdminRole(user) {
+  const roles = user?.roles ?? [];
+  return roles.includes("ADMIN") || roles.includes("FOUNDER");
+}
 
 /** Rank ladder mirror — source of truth is backend workers/scoring.js. */
 const RANK_STEPS = [

@@ -39,5 +39,7 @@ export const config = {
     "/onboarding/:path*",
     "/settings",
     "/settings/:path*",
+    "/admin",
+    "/admin/:path*",
   ],
 };

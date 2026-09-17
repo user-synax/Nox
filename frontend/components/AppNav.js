@@ -12,12 +12,13 @@ import {
   LogOut,
   Menu,
   Settings,
+  ShieldAlert,
   Trophy,
   User,
   Users,
   X,
 } from "lucide-react";
-import { auth } from "../lib/auth";
+import { auth, isStaff } from "../lib/auth";
 import { useUnreadCount } from "../lib/useNotifications";
 import { NotificationBell, UnreadPill } from "./NotificationBell";
 import { Avatar } from "./Avatar";
@@ -135,6 +136,24 @@ export function Sidebar({ user, pathname }) {
           </div>
         </div>
 
+        {isStaff(user) ? (
+          <div>
+            <p className="px-3 pb-2 text-[11px] font-medium tracking-[0.08em] text-ink-muted">
+              STAFF
+            </p>
+            <div className="flex flex-col gap-1">
+              <Link
+                href="/admin"
+                aria-current={pathname.startsWith("/admin") ? "page" : undefined}
+                className={itemCls(pathname.startsWith("/admin"))}
+              >
+                <ShieldAlert size={17} strokeWidth={2} aria-hidden="true" />
+                Admin
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
         <div>
           <p className="px-3 pb-2 text-[11px] font-medium tracking-[0.08em] text-ink-muted">
             YOU
@@ -240,6 +259,9 @@ export function TabBar({ user, pathname }) {
     { href: "/notifications", label: "Notifications", desc: "Comments, likes, milestones", Icon: Bell, active: path.startsWith("/notifications") },
     { href: profileHref, label: "Profile", desc: "Your stats", Icon: User, active: path === profileHref },
     { href: "/settings", label: "Settings", desc: "Account and prefs", Icon: Settings, active: path === "/settings" },
+    ...(isStaff(user)
+      ? [{ href: "/admin", label: "Admin", desc: "Reports and moderation", Icon: ShieldAlert, active: path.startsWith("/admin") }]
+      : []),
   ];
   const menuActive = more.some((t) => t.active);
   const activeIndex = primary.findIndex((t) => t.active);

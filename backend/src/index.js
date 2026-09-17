@@ -15,6 +15,7 @@ import { createRunRoutes } from "./routes/runs.js";
 import { createSubmissionRoutes } from "./routes/submissions.js";
 import { createLeaderboardRoutes } from "./routes/leaderboard.js";
 import { createSolutionRoutes } from "./routes/solutions.js";
+import { createModerationRoutes } from "./routes/moderation.js";
 import { createNotificationRoutes } from "./routes/notifications.js";
 import { assertEmailReady } from "./lib/email.js";
 import { initRealtime } from "./lib/realtime.js";
@@ -107,6 +108,10 @@ app.use("/api", createLeaderboardRoutes(db));
 // Community solutions + comments + likes (PRD §19, solved-only reads).
 app.use(createSolutionRoutes(db));
 app.use("/api", createSolutionRoutes(db));
+
+// Moderation + reports (PRD §23): POST /reports + /admin/* (MODERATOR+).
+app.use(createModerationRoutes(db));
+app.use("/api", createModerationRoutes(db));
 
 // In-app notifications inbox (PRD §21).
 app.use(createNotificationRoutes(db));

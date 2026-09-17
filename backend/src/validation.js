@@ -252,6 +252,57 @@ export const commentListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 
+/* ── Moderation + reports (PRD §23) ───────────────────────────── */
+
+export const REPORT_TARGETS = ["solution", "comment", "user"];
+export const REPORT_REASONS = ["spam", "harassment", "hate", "plagiarism", "explicit", "other"];
+export const REPORT_STATUSES = ["open", "upheld", "dismissed"];
+
+/** Loose ObjectId shape — handlers re-parse with toId() and 404. */
+const objectIdString = z
+  .string()
+  .trim()
+  .regex(/^[a-f0-9]{24}$/i, "Invalid id.");
+
+/** POST /reports — flag a solution, comment, or user for review. */
+export const reportCreateSchema = z.object({
+  targetType: z.enum(REPORT_TARGETS),
+  targetId: objectIdString,
+  reason: z.enum(REPORT_REASONS),
+  details: z.string().trim().max(500, "Details must be at most 500 characters.").optional(),
+});
+
+/** PATCH /admin/reports/:id — uphold or dismiss a report. */
+export const reportReviewSchema = z.object({
+  status: z.enum(["upheld", "dismissed"]),
+  note: z.string().trim().max(300, "Note must be at most 300 characters.").optional(),
+});
+
+/** POST /admin/.../hide — reversible takedown (hiddenAt stamp, never a delete). */
+export const hideContentSchema = z.object({
+  reason: z.string().trim().min(3, "Give a short reason.").max(200),
+  reportId: objectIdString.optional(),
+});
+
+/** POST /admin/users/:id/suspend — timed or indefinite (days omitted). */
+export const suspendUserSchema = z.object({
+  reason: z.string().trim().min(3, "Give a short reason.").max(200),
+  days: z.number().int().min(1).max(3650).optional(),
+});
+
+/**
+ * PATCH /admin/users/:id/roles — MODERATOR/ADMIN grants only.
+ * FOUNDER can never be granted or removed via the API (scripts only),
+ * so a compromised admin account can't crown itself.
+ */
+export const rolesUpdateSchema = z.object({
+  roles: z
+    .array(z.enum(["USER", "MODERATOR", "ADMIN"]))
+    .min(1, "Pick at least one role.")
+    .max(3)
+    .refine((r) => new Set(r).size === r.length, { message: "Duplicate roles." }),
+});
+
 /* ── Execution (run visible tests) ──────────────────────────────── */
 
 /** Languages the workers can actually execute (rest → 422 for now). */

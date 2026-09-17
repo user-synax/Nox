@@ -143,6 +143,37 @@ export async function connectDB(uri) {
     .collection("likes")
     .createIndex({ userId: 1, targetType: 1 }, { name: "likes_user_type" });
 
+  // Moderation (PRD §23): report queue + audit trail.
+  // One OPEN report per (reporter × target) — partial unique index, so
+  // re-reporting the same item 404s into a clean 409 instead of spam.
+  await db.collection("reports").createIndex(
+    { reporterId: 1, targetType: 1, targetId: 1 },
+    {
+      unique: true,
+      name: "reports_open_unique",
+      partialFilterExpression: { status: "open" },
+    }
+  );
+  await db
+    .collection("reports")
+    .createIndex({ status: 1, createdAt: -1 }, { name: "reports_status_created" });
+  await db
+    .collection("reports")
+    .createIndex({ targetType: 1, targetId: 1 }, { name: "reports_target" });
+  await db
+    .collection("auditLog")
+    .createIndex({ createdAt: -1 }, { name: "auditLog_created" });
+  await db
+    .collection("auditLog")
+    .createIndex({ actorId: 1, createdAt: -1 }, { name: "auditLog_actor_created" });
+  // Hidden-content filters on community reads (routes/solutions.js).
+  await db
+    .collection("solutions")
+    .createIndex({ hiddenAt: 1, createdAt: -1 }, { name: "solutions_hidden_created" });
+  await db
+    .collection("comments")
+    .createIndex({ hiddenAt: 1, createdAt: 1 }, { name: "comments_hidden_thread" });
+
   // Worker heartbeats (liveness for the execution queue status).
   await db
     .collection("workerHeartbeats")

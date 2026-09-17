@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Award, Bell, Heart, MessagesSquare, Trophy } from "lucide-react";
+import { Award, Bell, Heart, MessagesSquare, ShieldAlert, Trophy } from "lucide-react";
 import { auth } from "../../../lib/auth";
 import { notifyInboxChanged } from "../../../lib/useNotifications";
 
@@ -14,6 +14,9 @@ const TYPE_META = {
   comment_like: { Icon: Heart, label: "Like" },
   achievement: { Icon: Award, label: "Achievement" },
   rank_up: { Icon: Trophy, label: "Rank up" },
+  content_moderated: { Icon: ShieldAlert, label: "Moderation" },
+  account_suspended: { Icon: ShieldAlert, label: "Moderation" },
+  account_restored: { Icon: ShieldAlert, label: "Moderation" },
 };
 
 /** Deep link per notification — solutions open the thread, progression opens boards. */

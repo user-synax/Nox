@@ -23,6 +23,27 @@ import { issueToken, consumeToken, RESET_TTL_MS, issueOtp, consumeOtp } from "..
 import { sendEmail, verifyOtpHtml, resetPasswordHtml } from "../lib/email.js";
 import { defaultProfileStats } from "../lib/stats.js";
 import { googleKickoff, googleCallback } from "../lib/oauth.js";
+import { suspensionOf } from "../lib/moderation.js";
+
+/**
+ * Suspended accounts can't start sessions. Returned as a 403 (distinct
+ * from 401 bad-credentials) with the reason inline so the login form can
+ * explain it instead of looking broken.
+ */
+function suspensionBlock(res, userDoc) {
+  const state = suspensionOf(userDoc);
+  if (!state.suspended) return false;
+  const when = state.indefinite
+    ? "no expiry set"
+    : `until ${state.until.toLocaleDateString()}`;
+  res.status(403).json({
+    error: `This account is suspended (${when})${state.reason ? `: ${state.reason}` : "."}`,
+    code: "ACCOUNT_SUSPENDED",
+    suspendedUntil: state.until,
+    reason: state.reason,
+  });
+  return true;
+}
 
 /**
  * Auth surface (PRD §29) — hand-rolled sessions, no auth library.
@@ -189,6 +210,7 @@ export function createAuthRoutes(db) {
             code: "EMAIL_NOT_VERIFIED",
           });
         }
+        if (suspensionBlock(res, userDoc)) return;
         if (legacy) {
           // Transparent upgrade to the current hash format.
           await db
@@ -243,6 +265,7 @@ export function createAuthRoutes(db) {
         // Idempotent: already-verified users succeed without a code.
         const known = await db.collection("user").findOne({ email: req.body.email });
         if (known?.emailVerified) {
+          if (suspensionBlock(res, known)) return;
           const meta = requestMeta(req);
           setSessionCookie(res, await createSession(db, known._id, meta));
           return res.json({ user: sanitizeUser(known) });
@@ -259,6 +282,7 @@ export function createAuthRoutes(db) {
           );
         const userDoc = await db.collection("user").findOne({ _id: row.userId });
         if (!userDoc) return res.status(400).json({ error: "Invalid or expired code." });
+        if (suspensionBlock(res, userDoc)) return;
         // Verified users land signed in (verify page routes to onboarding).
         const meta = requestMeta(req);
         setSessionCookie(res, await createSession(db, userDoc._id, meta));

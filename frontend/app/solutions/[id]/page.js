@@ -14,6 +14,7 @@ import { auth } from "../../../lib/auth";
 import { useLiveRooms } from "../../../lib/socket";
 import { Avatar } from "../../../components/Avatar";
 import { LikeButton, timeAgo } from "../../../components/Solutions";
+import { ReportButton } from "../../../components/ReportDialog";
 
 const HOVER =
   "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]";
@@ -53,6 +54,7 @@ function CommentItem({
   onEdit,
   onDelete,
   confirmDelete,
+  showReport = false,
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
@@ -152,6 +154,15 @@ function CommentItem({
             onToggle={() => onLike(comment)}
             label="Like comment"
           />
+        ) : null}
+        {!temp && showReport && !isMine ? (
+          <span className="ml-auto">
+            <ReportButton
+              targetType="comment"
+              targetId={comment.id}
+              label="Report comment"
+            />
+          </span>
         ) : null}
         {confirmDelete ? (
           <span className="inline-flex items-center gap-2 text-[13px] text-ink-muted">
@@ -592,6 +603,14 @@ export default function SolutionDetailPage({ params }) {
                       <Trash2 size={15} aria-hidden="true" />
                     </button>
                   </span>
+                ) : !isAuthor && meUser ? (
+                  <span className="flex shrink-0 items-center">
+                    <ReportButton
+                      targetType="solution"
+                      targetId={solution.id}
+                      label="Report solution"
+                    />
+                  </span>
                 ) : null}
               </div>
 
@@ -730,6 +749,7 @@ export default function SolutionDetailPage({ params }) {
                         onEdit={editComment}
                         onDelete={deleteComment}
                         confirmDelete={confirmDeleteId === c.id}
+                        showReport={!!meUser}
                       />
                     ))}
                   </ul>

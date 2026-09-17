@@ -1,6 +1,7 @@
 import { randomBytes, createHash } from "node:crypto";
 import { ObjectId } from "mongodb";
 import { env } from "../env.js";
+import { suspensionOf } from "./moderation.js";
 
 /**
  * Session management — opaque tokens, no auth library.
@@ -118,6 +119,30 @@ export async function getSessionUser(db, req, res = null) {
     if (!user) {
       await db.collection("sessions").deleteOne({ _id: row._id }).catch(() => {});
       return null;
+    }
+    // Suspension is re-checked on every touch: a suspended user loses
+    // access the moment the stamp lands, even with a live cookie.
+    // Expired timed suspensions are lazily cleared here.
+    const suspension = suspensionOf(user);
+    if (suspension.suspended) {
+      await db.collection("sessions").deleteOne({ _id: row._id }).catch(() => {});
+      return null;
+    }
+    if (suspension.expired) {
+      await db
+        .collection("user")
+        .updateOne(
+          { _id: user._id },
+          {
+            $unset: { suspendedUntil: "", suspendedReason: "", suspendedBy: "", suspendedAt: "" },
+            $set: { updatedAt: new Date() },
+          }
+        )
+        .catch(() => {});
+      delete user.suspendedUntil;
+      delete user.suspendedReason;
+      delete user.suspendedBy;
+      delete user.suspendedAt;
     }
     if (res && Date.now() - new Date(row.updatedAt).getTime() > REFRESH_AFTER_MS) {
       const now = new Date();

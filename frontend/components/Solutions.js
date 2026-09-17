@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Heart, LoaderCircle, MessageSquare } from "lucide-react";
 import { auth } from "../lib/auth";
 import { Avatar } from "./Avatar";
+import { ReportButton } from "./ReportDialog";
 
 const HOVER =
   "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]";
@@ -54,7 +55,7 @@ export function LikeButton({ liked, count, onToggle, busy = false, label = "Like
 }
 
 /** Card for solution lists (challenge tab, profile). Code stays on detail. */
-export function SolutionCard({ solution, onLike, showChallenge = false }) {
+export function SolutionCard({ solution, onLike, showChallenge = false, reportable = true }) {
   if (!solution) return null;
   const a = solution.author ?? {};
   return (
@@ -107,6 +108,15 @@ export function SolutionCard({ solution, onLike, showChallenge = false }) {
           <MessageSquare size={14} aria-hidden="true" />
           <span className="Nox-mono">{solution.commentCount ?? 0}</span>
         </Link>
+        {reportable ? (
+          <span className="ml-auto">
+            <ReportButton
+              targetType="solution"
+              targetId={solution.id}
+              label="Report solution"
+            />
+          </span>
+        ) : null}
         {(solution.tags ?? []).slice(0, 3).map((t) => (
           <span key={t} className="Nox-mono hidden text-[12px] text-ink-muted sm:inline">
             #{t}
