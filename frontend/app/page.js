@@ -247,7 +247,10 @@ export default function Home() {
 
   // Logged-in users never see the marketing landing — mirrors the old
   // middleware which can't run cross-origin (Nox.session lives on the API
-  // origin). Client gate keeps / → /dashboard without a flash.
+  // origin). Client gate keeps / → /dashboard without blocking the landing
+  // for logged-out visitors: render marketing immediately, redirect in the
+  // background when a session resolves. Blocking on sessionLoading caused a
+  // blank black page on cold Render starts (API 30s+ → blank div).
   useEffect(() => {
     if (!sessionLoading && session?.user) router.replace("/dashboard");
   }, [sessionLoading, session, router]);
@@ -385,16 +388,9 @@ export default function Home() {
   const demoCode = demoTab === "broken" ? BROKEN_CODE : FIXED_CODE;
   const demoPassCount = demoTests.filter((t) => t.pass).length;
 
-  if (sessionLoading) {
-    return <div className="min-h-screen bg-canvas" aria-hidden="true" />;
-  }
-  if (session?.user) {
-    return (
-      <div className="min-h-screen bg-canvas grid place-items-center">
-        <p className="text-[14px] text-ink-muted">Redirecting to dashboard…</p>
-      </div>
-    );
-  }
+  // Never block landing on auth: logged-out (401 → session null) and
+  // still-loading states both render marketing instantly. Logged-in users
+  // redirect via the effect above.
 
   return (
     <div className="min-h-screen overflow-x-clip bg-canvas font-body text-ink">
